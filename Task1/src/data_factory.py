@@ -15,10 +15,10 @@ class DataFactory:
         self.initialized = True
 
     def outlier_detect_data(self, df_data):
-        pass
+        return df_data
 
-    def PCA_data(self):
-        pass
+    def PCA_data(self, df_data):
+        return df_data
 
     def impute_data(self, df_data, method='else'):
         """
@@ -68,8 +68,8 @@ class DataFactory:
             del data['id']
 
         data = self.impute_data(data)
-        data = self.outlier_detect_data()
-        data = self.PCA_data()
+        data = self.outlier_detect_data(data)
+        data = self.PCA_data(data)
 
         data = data.to_numpy()
 

@@ -44,13 +44,13 @@ class CoreComponent:
 
         self.train_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
         self.log_factory.Slog(MessageAttribute.EInfo,
-                              sentences="Read data completed from y_train.csv, with shape as {}".format(self.train_Y.shape)).to(self.device)
-        self.train_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.train_Y)).float())
+                              sentences="Read data completed from y_train.csv, with shape as {}".format(self.train_Y.shape))
+        self.train_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.train_Y)).float()).to(self.device)
 
         self.test_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
         self.log_factory.Slog(MessageAttribute.EInfo,
-                              sentences="Read data completed from X_test.csv, with shape as {}".format(self.test_X.shape)).to(self.device)
-        self.test_X = torch.autograd.Variable(torch.from_numpy(np.array(self.test_X)).float())
+                              sentences="Read data completed from X_test.csv, with shape as {}".format(self.test_X.shape))
+        self.test_X = torch.autograd.Variable(torch.from_numpy(np.array(self.test_X)).float()).to(self.device)
 
         # self.test_Y = read_dataset(os.path.join(self.data_path, "y_test.csv"))
         # self.log_factory.Slog(MessageAttribute.EInfo,

@@ -1,4 +1,4 @@
-from .src.CoreManagement import CoreComponent
+from src.CoreManagement import CoreComponent
 
 
 if __name__ == "__main__":
