@@ -38,16 +38,19 @@ class CoreComponent:
         self.data_factory.initialization()
 
         self.train_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"))
+        self.train_X = self.data_factory.process_dataset(self.train_X)
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from X_train.csv, with shape as {}".format(self.train_X.shape))
         self.train_X = torch.autograd.Variable(torch.from_numpy(np.array(self.train_X)).float()).to(self.device)
 
         self.train_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
+        self.train_Y = self.data_factory.process_dataset(self.train_Y)
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from y_train.csv, with shape as {}".format(self.train_Y.shape))
         self.train_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.train_Y)).float()).to(self.device)
 
         self.test_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
+        self.test_X = self.data_factory.process_dataset(self.test_X)
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from X_test.csv, with shape as {}".format(self.test_X.shape))
         self.test_X = torch.autograd.Variable(torch.from_numpy(np.array(self.test_X)).float()).to(self.device)

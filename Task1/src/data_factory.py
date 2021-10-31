@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+from scipy import stats
 from sklearn.impute import SimpleImputer
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler
@@ -14,10 +15,17 @@ class DataFactory:
     def initialization(self):
         self.initialized = True
 
-    def outlier_detect_data(self, df_data):
-        return df_data
+    def outlier_detect_data(self, df_data, method='zscore'):
+        if method == 'zscore': 
+            z_scores = stats.zscore(df_data)
+            abs_z_scores = np.abs(z_scores)
+            filtered_entries = (abs_z_scores < 3).all(axis=1)
+            new_df = df_data[filtered_entries]
+        else:
+            new_df = df_data
+        return new_df
 
-    def PCA_data(self, df_data):
+    def PCA_data(self, df_data, method='else'):
         return df_data
 
     def impute_data(self, df_data, method='else'):
@@ -67,11 +75,13 @@ class DataFactory:
             # data['id'] = data['id'].astype(int)
             del data['id']
 
-        data = self.impute_data(data)
-        data = self.outlier_detect_data(data)
-        data = self.PCA_data(data)
-
-        data = data.to_numpy()
-
         return data
 
+    def process_dataset(self, data, impute_method='mean', outlier_method='else', pca_method='else'):
+        # read_dataset() must be followed by the process_dataset() 
+        data = self.impute_data(data, impute_method)
+        data = self.outlier_detect_data(data, outlier_method)
+        data = self.PCA_data(data, pca_method)
+
+        data = data.to_numpy()
+        return data 
