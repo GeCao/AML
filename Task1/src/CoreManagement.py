@@ -83,9 +83,9 @@ class CoreComponent:
             for i in range(self.k_fold):
                 if i != self.k_fold - 1:
                     train_X = self.full_X[
-                        (torch.arange(self.full_X.shape[0]) < 3) + (torch.arange(self.full_X.shape[0]) >= 5)]
+                        (torch.arange(self.full_X.shape[0]) < i*stride) + (torch.arange(self.full_X.shape[0]) >= (i + 1)*stride)]
                     train_Y = self.full_Y[
-                        (torch.arange(self.full_X.shape[0]) < 3) + (torch.arange(self.full_X.shape[0]) >= 5)]
+                        (torch.arange(self.full_X.shape[0]) < i*stride) + (torch.arange(self.full_X.shape[0]) >= (i + 1)*stride)]
                     test_X = self.full_X[i*stride: (i + 1)*stride, :]
                     test_Y = self.full_Y[i*stride: (i + 1)*stride, :]
                 else:
