@@ -5,6 +5,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler
 
+
 class DataFactory:
     def __init__(self, core_management):
         self.core_management = core_management

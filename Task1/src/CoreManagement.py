@@ -2,7 +2,7 @@ import os
 import numpy as np
 import torch
 
-from .data_factory import read_dataset
+from .data_factory import DataFactory
 from .log_factory import LogFactory
 from Task1.src.models.lasso_model import MyLasso
 from .utils import *
@@ -22,6 +22,7 @@ class CoreComponent:
             self.train_model = None
 
         self.log_factory = LogFactory(self, log_to_disk=False)
+        self.data_factory = DataFactory(self)
 
         self.train_X = None
         self.train_Y = None
@@ -34,17 +35,17 @@ class CoreComponent:
         self.log_factory.initialization()
         self.log_factory.Slog(MessageAttribute.EInfo, sentences="Log Factory fully created")
 
-        self.train_X = read_dataset(os.path.join(self.data_path, "X_train.csv"))
+        self.train_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"))
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from X_train.csv, with shape as {}".format(self.train_X.shape))
         self.train_X = torch.autograd.Variable(torch.from_numpy(np.array(self.train_X)).float())
 
-        self.train_Y = read_dataset(os.path.join(self.data_path, "y_train.csv"))
+        self.train_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from y_train.csv, with shape as {}".format(self.train_Y.shape))
         self.train_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.train_Y)).float())
 
-        self.test_X = read_dataset(os.path.join(self.data_path, "X_test.csv"))
+        self.test_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from X_test.csv, with shape as {}".format(self.test_X.shape))
         self.test_X = torch.autograd.Variable(torch.from_numpy(np.array(self.test_X)).float())
