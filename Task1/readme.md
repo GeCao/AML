@@ -11,7 +11,4 @@
 * Model Choice
     - [ ] LASSO (1-norm for regularization)
     - [ ] Ridge Regression (2-norm for regularization)
-    - [ ] Additive Model 
-    - [ ] MARS
     - [ ] Neural Network (大力出奇迹)
-    - [ ] Projective Pursuit Regression
