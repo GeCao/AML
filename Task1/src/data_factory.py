@@ -14,7 +14,13 @@ class DataFactory:
     def initialization(self):
         self.initialized = True
 
-    def clean_data(self, df_data, method='else'):
+    def outlier_detect_data(self, df_data):
+        pass
+
+    def PCA_data(self):
+        pass
+
+    def impute_data(self, df_data, method='else'):
         """
 
         :param df_data: our data with DataFrame mode
@@ -61,7 +67,10 @@ class DataFactory:
             # data['id'] = data['id'].astype(int)
             del data['id']
 
-        data = self.clean_data(data)
+        data = self.impute_data(data)
+        data = self.outlier_detect_data()
+        data = self.PCA_data()
+
         data = data.to_numpy()
 
         return data

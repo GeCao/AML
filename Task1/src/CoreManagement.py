@@ -4,7 +4,7 @@ import torch
 
 from .data_factory import DataFactory
 from .log_factory import LogFactory
-from Task1.src.models.lasso_model import MyLasso
+from .models.lasso_model import MyLasso
 from .utils import *
 
 
