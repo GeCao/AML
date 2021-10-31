@@ -35,6 +35,8 @@ class CoreComponent:
         self.log_factory.initialization()
         self.log_factory.Slog(MessageAttribute.EInfo, sentences="Log Factory fully created")
 
+        self.data_factory.initialization()
+
         self.train_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"))
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from X_train.csv, with shape as {}".format(self.train_X.shape))
