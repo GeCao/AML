@@ -82,6 +82,7 @@ class CoreComponent:
             test_loss = 0.0
             for i in range(self.k_fold):
                 if i != self.k_fold - 1:
+                    # k-fold CV
                     train_X = self.full_X[
                         (torch.arange(self.full_X.shape[0]) < i*stride) + (torch.arange(self.full_X.shape[0]) >= (i + 1)*stride)]
                     train_Y = self.full_Y[
