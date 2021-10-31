@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
-from sklearn.impute import SimpleImputer
+from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler
 
@@ -34,6 +34,7 @@ class DataFactory:
         """
         if method == 'knn':
             # TODO: this method has not been fully implemented
+            """
             column_name_list = df_data.columns.tolist()
             for col_name in column_name_list:
                 if df_data[col_name].isna().any():
@@ -41,6 +42,10 @@ class DataFactory:
                     real_part = df_data[col_name].dropna()
                     # model = KNeighborsRegressor(n_neighbors=5).fit()
                     return df_data
+            """
+            knn_imputer = KNNImputer(n_neighbors=5)
+            df_data = knn_imputer.fit_transform(df_data)
+            return df_data
         elif method == 'delete':
             df_data = df_data.dropna(axis=0, how='any')  # Delete this row as long as a nan has been detected
             return df_data
@@ -67,11 +72,14 @@ class DataFactory:
             # data['id'] = data['id'].astype(int)
             del data['id']
 
-        data = self.impute_data(data)
+        data = self.impute_data(data, 'knn')
         data = self.outlier_detect_data(data)
         data = self.PCA_data(data)
 
-        data = data.to_numpy()
+        try:
+            data = data.to_numpy()
+        except:
+            pass
 
         return data
 

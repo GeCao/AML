@@ -10,6 +10,6 @@ class enum(Enum):
 a = enum(0)
 print(a.value == enum.EInfo.value)
 
-a = torch.Tensor([0, 1, 2, 3]).to('cpu')
-b = torch.Tensor([0, 1, 2, 3]).to('cpu')
-print(a*b)
+a = torch.Tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).to('cpu')
+print(a[3:5])
+print(a[(torch.arange(a.shape[0]) < 3) + (torch.arange(a.shape[0]) >= 5)])
