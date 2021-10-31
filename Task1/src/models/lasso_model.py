@@ -21,7 +21,7 @@ class MyLasso(MyModel):
         self.initialized = False
 
     def initialization(self):
-        self.batch_size, self.input_dimension = self.core_management.train_X.shape
+        self.batch_size, self.input_dimension = self.core_management.full_X.shape
         self.input_dimension = self.input_dimension
         self.total_epoch = 2000
 
