@@ -2,17 +2,17 @@ import torch
 
 
 class UnitGaussianNormalizer(object):
-    def __init__(self, core_management, x, eps=0.00001):
+    def __init__(self, core_management, eps=0.00001):
         super(UnitGaussianNormalizer, self).__init__()
 
+        self.initialized = False
+
+    def initialization(self, x, eps=0.00001):
         # x could be in shape of ntrain*n or ntrain*T*n or ntrain*n*T
         self.mean = torch.mean(x, 0)
         self.std = torch.std(x, 0)
         self.eps = eps
 
-        self.initialized = False
-
-    def initialization(self):
         self.initialized = True
 
     def encode(self, x):
