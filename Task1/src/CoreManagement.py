@@ -7,6 +7,7 @@ from .log_factory import LogFactory
 from .Normalizer import UnitGaussianNormalizer
 from .models.lasso_model import MyLasso
 from .utils import *
+from sklearn.metrics import r2_score
 
 
 class CoreComponent:
@@ -63,7 +64,8 @@ class CoreComponent:
         self.full_normalizer.initialization(self.full_X)
         self.full_X = self.full_normalizer.encode(self.full_X)
 
-        self.validation_normalizer.initialization(self.validation_X)
+        # self.validation_normalizer.initialization(self.validation_X)
+        self.validation_normalizer = self.full_normalizer
         self.validation_X = self.validation_normalizer.encode(self.validation_X)
 
         self.train_model.initialization()
@@ -80,6 +82,7 @@ class CoreComponent:
             test_Y = None
 
             test_loss = 0.0
+            test_r2_score = 0.0
             for i in range(self.k_fold):
                 if i != self.k_fold - 1:
                     # k-fold CV
@@ -90,10 +93,10 @@ class CoreComponent:
                     test_X = self.full_X[i*stride: (i + 1)*stride, :]
                     test_Y = self.full_Y[i*stride: (i + 1)*stride, :]
                 else:
-                    train_X = self.full_X[:i*stride]
-                    train_Y = self.full_Y[:i*stride]
-                    test_X = self.full_X[i * stride:]
-                    test_Y = self.full_Y[i * stride:]
+                    train_X = self.full_X[:i*stride, ...]
+                    train_Y = self.full_Y[:i*stride, ...]
+                    test_X = self.full_X[i * stride:, ...]
+                    test_Y = self.full_Y[i * stride:, ...]
                 self.train_model.optimizer.zero_grad()
                 predicted_y = self.train_model(train_X)
                 temp_loss = self.train_model.compute_loss(predicted_y, train_Y)
@@ -103,9 +106,20 @@ class CoreComponent:
                 with torch.no_grad():
                     predicted_y_test = self.train_model(test_X)
                     test_loss += self.train_model.compute_loss(predicted_y_test, test_Y)
+                    test_r2_score = r2_score(test_Y.cpu().numpy(), predicted_y_test.cpu().numpy())
+
             if epoch % 200 == 0:
-                self.log_factory.Slog(MessageAttribute.EInfo, sentences="Epoch={}, while loss={}".format(epoch, test_loss))
-                computed_losses.append(test_loss.detach().clone())
+                self.log_factory.Slog(MessageAttribute.EInfo,
+                                      sentences="Epoch={}, while loss={}, r2_score = {}".format(epoch, test_loss, test_r2_score))
+                computed_losses.append(test_loss.detach().clone().cpu())
+                with torch.no_grad():
+                    predicted_y_validate = self.train_model(self.validation_X).squeeze(1).cpu().numpy()
+                    self.log_factory.Slog(MessageAttribute.EInfo, sentences="Shape of predicted y={}".format(predicted_y_validate.shape))
+                    with open(os.path.join(self.data_path, "y_validate.csv"), 'w') as f:
+                        f.write("id,y\n")
+                        for i, pred_y in enumerate(predicted_y_validate):
+                            f.write("{},{}\n".format(i, pred_y))
+                        f.close()
         model_evaluation(computed_losses, epoch_step=200)
 
     def kill(self):

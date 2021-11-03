@@ -2,15 +2,10 @@ import torch
 import torch.nn.functional as F
 
 
-class R2Score(torch.nn.Module):
-    def __init__(self, train_Y, device, regularization):
-        super(R2Score, self).__init__()
-        self.train_Y = train_Y
-        self.device = device
+class MyLoss(torch.nn.Module):
+    def __init__(self, regularization):
+        super(MyLoss, self).__init__()
         self.regularization = regularization
-
-        mean_y = torch.mean(self.train_Y)
-        self.loss_denominator = torch.sum((self.train_Y - mean_y) * (self.train_Y - mean_y))
 
     def forward(self, predicted_y, train_Y):
         # loss_nominator = torch.sum((self.train_Y - predicted_y) * (self.train_Y - predicted_y))
