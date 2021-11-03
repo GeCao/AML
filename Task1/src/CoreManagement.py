@@ -50,7 +50,7 @@ class CoreComponent:
         self.full_X = torch.autograd.Variable(torch.from_numpy(np.array(self.full_X)).float()).to(self.device)
 
         self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
-        self.full_Y = self.data_factory.process_dataset(self.full_Y)
+        # self.full_Y = self.data_factory.process_dataset(self.full_Y) # Y data cannot be processed!
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
         self.full_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.full_Y)).float()).to(self.device)
