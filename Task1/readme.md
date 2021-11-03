@@ -5,8 +5,8 @@
 * Feature Space
     - [x] NAN from dataset handling (Missing data)
     - [ ] Outliers (Wrong data handling)
-    - [ ] Normalization of data (非常重要! refer to https://www.bilibili.com/video/BV1nJ411z7fe?p=14)
-    - [ ] Dimension Reduction (PCA)
+    - [x] Normalization of data (非常重要! refer to https://www.bilibili.com/video/BV1nJ411z7fe?p=14)
+    - [x] Dimension Reduction (PCA)
     
 * Model Choice
     - [ ] LASSO (1-norm for regularization)

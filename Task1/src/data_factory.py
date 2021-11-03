@@ -5,6 +5,7 @@ from scipy import stats
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.decomposition import PCA
 
 
 class DataFactory:
@@ -25,8 +26,14 @@ class DataFactory:
             new_df = df_data
         return new_df
 
-    def PCA_data(self, df_data, method='else'):
-        return df_data
+    def PCA_data(self, df_data, method='pca'):
+        if (method == 'pca') & (df_data.shape[1] > 200):
+            estimator = PCA(n_components=200)
+            df = estimator.fit_transform(df_data)
+            new_df = pd.DataFrame(df)
+            return new_df
+        else:
+            return df_data
 
     def impute_data(self, df_data, method='else'):
         """
