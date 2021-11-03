@@ -90,7 +90,8 @@ class DataFactory:
         return data
 
     def process_dataset(self, data, impute_method='knn', outlier_method='else', pca_method='else'):
-        # read_dataset() must be followed by the process_dataset() 
+        # read_dataset() must be followed by the process_dataset()
+        # read_dataset() must be followed by the process_dataset()
         data = self.impute_data(data, impute_method)
         data = self.outlier_detect_data(data, outlier_method)
         data = self.PCA_data(data, pca_method)
