@@ -4,9 +4,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
+from sklearn.svm import LinearSVC
+from sklearn.feature_selection import SelectFromModel
 
 
 class DataFactory:
@@ -26,18 +29,44 @@ class DataFactory:
             df_data[filtered_entries] = nan
             new_df = df_data 
             # new_df = df_data[filtered_entries]
+        elif method == 'isolationforest':
+            anomalies_ratio = 0.2  # 预测样本中outlier的比例
+
+            if_sk = IsolationForest(n_estimators=100,
+                                    max_samples="auto",
+                                    contamination=anomalies_ratio,
+                                    random_state=np.random.RandomState(42))
+            if_sk.fit(df_data)
+            new_df = df_data
         else:
             new_df = df_data
         return new_df
 
-    def PCA_data(self, df_data, method='pca'):
-        if (method == 'pca') & (df_data.shape[1] > 200):
+    def feature_selection(self, X, y, method='pca', rows_X=None):
+        train_X = X
+        """
+        解释一下rows_X这个参数，因为现在train_X和test_X被合并到了一起，所以我们希望填入train_X的行数来把train_X提取出来
+        """
+        if rows_X is not None:
+            train_X = X[:rows_X, ...]
+
+        if (method == 'pca') & (X.shape[1] > 2):
             estimator = PCA(n_components=256)
-            df = estimator.fit_transform(df_data)
-            new_df = pd.DataFrame(df)
-            return new_df
+            df = estimator.fit_transform(X)
+            return df, y
+        elif method == 'tree':
+            clf = ExtraTreesClassifier(n_estimators=50)
+            clf = clf.fit(train_X, y)
+            model = SelectFromModel(clf, prefit=True, threshold=-np.inf, max_features=200)
+            X = model.transform(X)
+            return X, y
+        elif method == 'lasso':
+            lsvc = LinearSVC(C=0.01, penalty="l1", dual=False).fit(train_X, y)
+            model = SelectFromModel(lsvc, prefit=True, threshold=-np.inf, max_features=200)
+            X = model.transform(X)
+            return X, y
         else:
-            return df_data
+            return X, y
 
     def impute_data(self, df_data, method='else'):
         """
@@ -99,7 +128,6 @@ class DataFactory:
         data = self.impute_data(data, impute_method)
         data = self.outlier_detect_data(data, outlier_method)
         data = self.impute_data(data, impute_method)
-        data = self.PCA_data(data, pca_method)
 
         try:
             data = data.to_numpy()

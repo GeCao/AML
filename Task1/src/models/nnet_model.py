@@ -5,9 +5,9 @@ from ..losses.MyLoss import MyLoss
 
 
 # TODO: This is not lasso, still waiting for implemented
-class MyLasso(MyModel):
+class MyNNet(MyModel):
     def __init__(self, core_management):
-        super(MyLasso, self).__init__(core_management)
+        super(MyNNet, self).__init__(core_management)
 
         self.hideen_dim_0 = 256
         self.hideen_dim_1 = 128
