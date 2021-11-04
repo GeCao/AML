@@ -11,10 +11,13 @@ from sklearn.metrics import r2_score
 
 
 class CoreComponent:
-    def __init__(self, model='lasso', device=None):
+    def __init__(self, model='lasso', imputer=None, outlier=None, pca=None, device=None):
         self.root_path = os.path.abspath(os.curdir)
         self.data_path = os.path.join(self.root_path, 'data')
         print("The root path of our project: ", self.root_path)
+        self.imputer = 'knn' if imputer is None else imputer
+        self.outlier = 'zscore' if outlier is None else outlier
+        self.pca = 'pca' if outlier is None else pca
         self.device = 'cuda' if device is None else device  # choose with your preference
 
         model_name = 'lasso' if model is None else model  # choose with your preference
@@ -51,7 +54,8 @@ class CoreComponent:
         full_X_shape_0 = self.full_X.shape[0]
         validation_X_shape_0 = self.validation_X.shape[0]
         full_validation_X = np.concatenate((self.full_X, self.validation_X), axis=0)
-        full_validation_X = self.data_factory.process_dataset(full_validation_X)
+        full_validation_X = self.data_factory.process_dataset(full_validation_X, impute_method=self.imputer,
+                                                              outlier_method=self.outlier, pca_method=self.pca)
         self.full_normalizer.initialization(full_validation_X)
         full_validation_X = self.full_normalizer.encode(full_validation_X)
         self.full_X = full_validation_X[:full_X_shape_0, :]
