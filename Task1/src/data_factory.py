@@ -91,7 +91,7 @@ class DataFactory:
             # data['id'] = data['id'].astype(int)
             del data['id']
 
-        return data
+        return data.to_numpy()
 
     def process_dataset(self, data, impute_method='knn', outlier_method='zscore', pca_method='pca'):
         # read_dataset() must be followed by the process_dataset()

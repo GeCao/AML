@@ -16,4 +16,5 @@ def model_evaluation(computed_losses, epoch_step=200):
     plt.xlabel("epoch")
     plt.plot(epochs, computed_losses, 'g')
     plt.ylabel("loss")
+    plt.ylim(0, 20)
     plt.show()

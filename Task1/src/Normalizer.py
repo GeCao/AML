@@ -9,8 +9,8 @@ class UnitGaussianNormalizer(object):
 
     def initialization(self, x, eps=0.00001):
         # x could be in shape of ntrain*n or ntrain*T*n or ntrain*n*T
-        self.mean = torch.mean(x, 0)
-        self.std = torch.std(x, 0)
+        self.mean = (x).mean(0)
+        self.std = (x).std(0)
         self.eps = eps
 
         self.initialized = True
