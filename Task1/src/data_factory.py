@@ -13,6 +13,9 @@ from sklearn.feature_selection import SelectFromModel
 
 
 class DataFactory:
+    train_dataset_filter = None 
+    # to filter y_train when x_train is trimmed 
+
     def __init__(self, core_management):
         self.core_management = core_management
         self.initialized = False
@@ -20,7 +23,7 @@ class DataFactory:
     def initialization(self):
         self.initialized = True
 
-    def outlier_detect_data(self, df_data, method='zscore'):
+    def outlier_detect_data(self, df_data, method='zscore', rows_X=0):
         # make these outlier entries nan
         if method == 'zscore': 
             z_scores = stats.zscore(df_data)
@@ -37,7 +40,14 @@ class DataFactory:
                                     contamination=anomalies_ratio,
                                     random_state=np.random.RandomState(42))
             if_sk.fit(df_data)
-            new_df = df_data
+            if_predict = if_sk.predict(df_data)
+            if_filter = if_predict > 0  # map +1/-1 to True/False
+            if_filter = if_filter[:rows_X] 
+            self.train_dataset_filter = if_filter 
+            
+            if_df = df_data[:rows_X][if_filter] 
+            zs_df = self.outlier_detect_data(df_data[rows_X:], 'zscore') 
+            new_df = np.concatenate((if_df, zs_df), axis=0)
         else:
             new_df = df_data
         return new_df
@@ -123,10 +133,14 @@ class DataFactory:
 
         return data.to_numpy()
 
-    def process_dataset(self, data, impute_method='knn', outlier_method='zscore', pca_method='pca'):
+    def process_dataset(self, data, impute_method='knn', outlier_method='zscore', pca_method='pca', rows_X=0):
         # read_dataset() must be followed by the process_dataset()
+        # rows_X to help not to delete outliers of x_test
+        if self.train_dataset_filter is not None:
+            # trim Y according to X
+            data = data[self.train_dataset_filter]
         data = self.impute_data(data, impute_method)
-        data = self.outlier_detect_data(data, outlier_method)
+        data = self.outlier_detect_data(data, outlier_method, rows_X)
         data = self.impute_data(data, impute_method)
 
         try:

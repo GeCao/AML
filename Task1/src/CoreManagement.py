@@ -12,14 +12,14 @@ from sklearn.linear_model import LassoCV
 
 
 class CoreComponent:
-    def __init__(self, model='lasso', imputer=None, outlier=None, pca=None, device=None):
+    def __init__(self, model='lasso', imputer='knn', outlier='zscore', pca='pca', device='cuda'):
         self.root_path = os.path.abspath(os.curdir)
         self.data_path = os.path.join(self.root_path, 'data')
         print("The root path of our project: ", self.root_path)
-        self.imputer = 'knn' if imputer is None else imputer
-        self.outlier = 'zscore' if outlier is None else outlier
-        self.pca = 'pca' if outlier is None else pca
-        self.device = 'cuda' if device is None else device  # choose with your preference
+        self.imputer = imputer
+        self.outlier = outlier
+        self.pca = pca
+        self.device = device  # choose with your preference
 
         self.model_name = 'lasso' if model is None else model  # choose with your preference
         if self.model_name == 'lasso':
@@ -59,11 +59,12 @@ class CoreComponent:
         validation_X_shape_0 = self.validation_X.shape[0]
         full_validation_X = np.concatenate((self.full_X, self.validation_X), axis=0)
         full_validation_X = self.data_factory.process_dataset(full_validation_X, impute_method=self.imputer,
-                                                              outlier_method=self.outlier)
+                                                              outlier_method=self.outlier, rows_X=full_X_shape_0)
         self.full_Y = self.data_factory.process_dataset(self.full_Y, impute_method=self.imputer,
-                                                        outlier_method=self.outlier)
+                                                        outlier_method='else')
         self.full_normalizer.initialization(full_validation_X)
         full_validation_X = self.full_normalizer.encode(full_validation_X)
+        full_X_shape_0 = len(self.full_Y)
         full_validation_X, self.full_Y = self.data_factory.feature_selection(full_validation_X, self.full_Y,
                                                                              method=self.pca, rows_X=full_X_shape_0)
         self.log_factory.Slog(MessageAttribute.EInfo,
