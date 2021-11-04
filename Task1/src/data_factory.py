@@ -1,3 +1,4 @@
+from math import nan
 import os
 import numpy as np
 import pandas as pd
@@ -17,11 +18,14 @@ class DataFactory:
         self.initialized = True
 
     def outlier_detect_data(self, df_data, method='zscore'):
+        # make these outlier entries nan
         if method == 'zscore': 
             z_scores = stats.zscore(df_data)
             abs_z_scores = np.abs(z_scores)
-            filtered_entries = (abs_z_scores < 3).all(axis=1)
-            new_df = df_data[filtered_entries]
+            filtered_entries = (abs_z_scores > 3)
+            df_data[filtered_entries] = nan
+            new_df = df_data 
+            # new_df = df_data[filtered_entries]
         else:
             new_df = df_data
         return new_df
@@ -89,10 +93,11 @@ class DataFactory:
 
         return data
 
-    def process_dataset(self, data, impute_method='knn', outlier_method='else', pca_method='else'):
+    def process_dataset(self, data, impute_method='knn', outlier_method='zscore', pca_method='pca'):
         # read_dataset() must be followed by the process_dataset()
         data = self.impute_data(data, impute_method)
         data = self.outlier_detect_data(data, outlier_method)
+        data = self.impute_data(data, impute_method)
         data = self.PCA_data(data, pca_method)
 
         try:

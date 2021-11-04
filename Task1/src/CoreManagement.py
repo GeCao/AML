@@ -15,7 +15,7 @@ class CoreComponent:
         self.root_path = os.path.abspath(os.curdir)
         self.data_path = os.path.join(self.root_path, 'data')
         print("The root path of our project: ", self.root_path)
-        self.device = 'cuda' if device is None else device  # choose with your preference
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'  # choose with your preference
 
         model_name = 'lasso' if model is None else model  # choose with your preference
         if model_name == 'lasso':
