@@ -32,7 +32,7 @@ class DataFactory:
 
     def PCA_data(self, df_data, method='pca'):
         if (method == 'pca') & (df_data.shape[1] > 200):
-            estimator = PCA(n_components=200)
+            estimator = PCA(n_components=256)
             df = estimator.fit_transform(df_data)
             new_df = pd.DataFrame(df)
             return new_df
@@ -52,7 +52,6 @@ class DataFactory:
         :return:
         """
         if method == 'knn':
-            # TODO: this method has not been fully implemented
             """
             column_name_list = df_data.columns.tolist()
             for col_name in column_name_list:
@@ -68,10 +67,12 @@ class DataFactory:
         elif method == 'delete':
             df_data = df_data.dropna(axis=0, how='any')  # Delete this row as long as a nan has been detected
             return df_data
-        else:
+        elif method == 'mean':
             arr = SimpleImputer(missing_values=np.nan, strategy="mean").fit(
                 df_data.values).transform(df_data.values)
             df_data = pd.DataFrame(data=arr, index=df_data.index.values, columns=df_data.columns.values)
+            return df_data
+        else:
             return df_data
 
     def read_dataset(self, file_path):
