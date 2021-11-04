@@ -87,9 +87,9 @@ class DataFactory:
             # data['id'] = data['id'].astype(int)
             del data['id']
 
-        return data
+        return data.to_numpy()
 
-    def process_dataset(self, data, impute_method='knn', outlier_method='else', pca_method='else'):
+    def process_dataset(self, data, impute_method='knn', outlier_method='else', pca_method='pca'):
         # read_dataset() must be followed by the process_dataset()
         data = self.impute_data(data, impute_method)
         data = self.outlier_detect_data(data, outlier_method)

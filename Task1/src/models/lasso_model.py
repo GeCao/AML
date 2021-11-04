@@ -22,14 +22,14 @@ class MyLasso(MyModel):
         self.layer5 = None
         self.layer6 = None
 
-        self.regularization = 1e-4
+        self.regularization = 0.000005
 
         self.initialized = False
 
     def initialization(self):
         self.batch_size, self.input_dimension = self.core_management.full_X.shape
         self.input_dimension = self.input_dimension
-        self.total_epoch = 10000
+        self.total_epoch = 4000
 
         self.layer1 = torch.nn.Linear(self.input_dimension, self.hideen_dim_1).to(self.device)
         self.layer2 = torch.nn.Linear(self.hideen_dim_1, self.hideen_dim_2).to(self.device)
@@ -39,7 +39,7 @@ class MyLasso(MyModel):
         self.layer6 = torch.nn.Linear(self.hideen_dim_5, 1).to(self.device)
 
         # self.loss = R2Score(self.core_management.train_Y, self.core_management.device, self.regularization)
-        self.loss = MyLoss(regularization=0.0001)
+        self.loss = MyLoss(regularization=self.regularization)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=0.1)
 
         self.initialized = True

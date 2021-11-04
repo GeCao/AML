@@ -26,7 +26,6 @@ class CoreComponent:
         self.log_factory = LogFactory(self, log_to_disk=False)
         self.data_factory = DataFactory(self)
         self.full_normalizer = UnitGaussianNormalizer(self)
-        self.validation_normalizer = UnitGaussianNormalizer(self)
 
         self.full_X = None
         self.full_Y = None
@@ -43,30 +42,33 @@ class CoreComponent:
 
         self.data_factory.initialization()
 
+        # 1. read data
         self.full_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"))
-        self.full_X = self.data_factory.process_dataset(self.full_X)
+        self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
+        self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
+
+        # 2. process X files together, while do not process any y files
+        full_X_shape_0 = self.full_X.shape[0]
+        validation_X_shape_0 = self.validation_X.shape[0]
+        full_validation_X = np.concatenate((self.full_X, self.validation_X), axis=0)
+        full_validation_X = self.data_factory.process_dataset(full_validation_X)
+        self.full_normalizer.initialization(full_validation_X)
+        full_validation_X = self.full_normalizer.encode(full_validation_X)
+        self.full_X = full_validation_X[:full_X_shape_0, :]
+        self.validation_X = full_validation_X[-validation_X_shape_0:, :]
+
+        # 3. transfer numpy data to Tensor data
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
         self.full_X = torch.autograd.Variable(torch.from_numpy(np.array(self.full_X)).float()).to(self.device)
-
-        self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
         # self.full_Y = self.data_factory.process_dataset(self.full_Y) # Y data cannot be processed!
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
         self.full_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.full_Y)).float()).to(self.device)
 
-        self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
-        self.validation_X = self.data_factory.process_dataset(self.validation_X)
         self.log_factory.Slog(MessageAttribute.EInfo,
                               sentences="Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
         self.validation_X = torch.autograd.Variable(torch.from_numpy(np.array(self.validation_X)).float()).to(self.device)
-
-        self.full_normalizer.initialization(self.full_X)
-        self.full_X = self.full_normalizer.encode(self.full_X)
-
-        # self.validation_normalizer.initialization(self.validation_X)
-        self.validation_normalizer = self.full_normalizer
-        self.validation_X = self.validation_normalizer.encode(self.validation_X)
 
         self.train_model.initialization()
 
