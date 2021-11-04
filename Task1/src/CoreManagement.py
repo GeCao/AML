@@ -29,6 +29,7 @@ class CoreComponent:
         self.log_factory = LogFactory(self, log_to_disk=False)
         self.data_factory = DataFactory(self)
         self.full_normalizer = UnitGaussianNormalizer(self)
+        self.y_normalizer = UnitGaussianNormalizer(self)
 
         self.full_X = None
         self.full_Y = None
@@ -50,7 +51,7 @@ class CoreComponent:
         self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
         self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
 
-        # 2. process X files together, while do not process any y files
+        # 2. process X files together, while y files can not be processed since it is physically correct
         full_X_shape_0 = self.full_X.shape[0]
         validation_X_shape_0 = self.validation_X.shape[0]
         full_validation_X = np.concatenate((self.full_X, self.validation_X), axis=0)
@@ -60,6 +61,9 @@ class CoreComponent:
         full_validation_X = self.full_normalizer.encode(full_validation_X)
         self.full_X = full_validation_X[:full_X_shape_0, :]
         self.validation_X = full_validation_X[-validation_X_shape_0:, :]
+
+        # self.y_normalizer.initialization(self.full_Y)
+        # self.full_Y = self.y_normalizer.encode(self.full_Y)
 
         # 3. transfer numpy data to Tensor data
         self.log_factory.Slog(MessageAttribute.EInfo,
@@ -75,20 +79,17 @@ class CoreComponent:
         self.validation_X = torch.autograd.Variable(torch.from_numpy(np.array(self.validation_X)).float()).to(self.device)
 
         self.train_model.initialization()
-
         self.initialized = True
 
     def run(self):
         computed_losses = []
         for epoch in range(self.train_model.total_epoch):
             stride = self.full_X.shape[0] // self.k_fold
-            train_X = None
-            train_Y = None
-            test_X = None
-            test_Y = None
+            train_X, train_Y, test_X, test_Y = None, None, None, None
 
             test_loss = 0.0
             test_r2_score = 0.0
+            self.train_model.train()
             for i in range(self.k_fold):
                 if i != self.k_fold - 1:
                     # k-fold CV
@@ -103,6 +104,7 @@ class CoreComponent:
                     train_Y = self.full_Y[:i*stride, ...]
                     test_X = self.full_X[i * stride:, ...]
                     test_Y = self.full_Y[i * stride:, ...]
+
                 self.train_model.optimizer.zero_grad()
                 predicted_y = self.train_model(train_X)
                 temp_loss = self.train_model.compute_loss(predicted_y, train_Y)
@@ -120,6 +122,7 @@ class CoreComponent:
                 computed_losses.append(test_loss.detach().clone().cpu())
                 with torch.no_grad():
                     predicted_y_validate = self.train_model(self.validation_X).squeeze(1).cpu().numpy()
+                    # predicted_y_validate = self.y_normalizer.decode(predicted_y_validate)
                     self.log_factory.Slog(MessageAttribute.EInfo, sentences="Shape of predicted y={}".format(predicted_y_validate.shape))
                     with open(os.path.join(self.data_path, "y_validate.csv"), 'w') as f:
                         f.write("id,y\n")
