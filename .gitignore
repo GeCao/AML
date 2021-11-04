@@ -2,4 +2,4 @@ Task1/log/
 Task1/src/__pycache__/*
 Task1/src/*/__pycache__/*
 Task1/src/*/__pycache__/*
-
+*.pyc
