@@ -172,8 +172,8 @@ class DataFactory:
         missing_indicator = MissingIndicator(missing_values=nan, features='all')
         self.nan_indicator_mat = missing_indicator.fit_transform(X)  # 得到一个与data同shape的矩阵，True代表有nan，False代表正常数据
 
-        X, y = self.impute_data(X, y, 'knn')  # knn对outlier非常敏感，因此这只是一个为了outlier detection做出的预处理
+        X, y = self.impute_data(X, y, impute_method)  # knn对outlier非常敏感，因此这只是一个为了outlier detection做出的预处理
         X, y = self.outlier_detect_data(X, y, outlier_method)
-        X = np.where(self.nan_indicator_mat, nan, X)  # 此前用knn做的impute非常差，所以我们要重新mask掉，然后做最终的impute
-        X, y = self.impute_data(X, y, impute_method)
+        # X = np.where(self.nan_indicator_mat, nan, X)  # 此前用knn做的impute非常差，所以我们要重新mask掉，然后做最终的impute
+        # X, y = self.impute_data(X, y, impute_method)
         return X, y

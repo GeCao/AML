@@ -9,7 +9,7 @@ class MyNNet(MyModel):
     def __init__(self, core_management):
         super(MyNNet, self).__init__(core_management)
 
-        self.hideen_dim_0 = 50
+        self.hideen_dim_0 = 14
         # self.hideen_dim_1 = 128
         # self.hideen_dim_2 = 256
 
@@ -32,15 +32,15 @@ class MyNNet(MyModel):
 
         # self.loss = R2Score(self.core_management.train_Y, self.core_management.device, self.regularization)
         self.loss = MyLoss(regularization=self.regularization)
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=0.01)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=0.1)
 
         self.initialized = True
 
     def forward(self, input):
         output0 = F.leaky_relu_(self.layer0(input))
-        output0_halv = F.dropout(output0, p=0.2)
+        # output0_halv = F.dropout(output0, p=0.5)
 
-        predicted_y = F.leaky_relu_(self.layer1(output0_halv))
+        predicted_y = F.leaky_relu_(self.layer1(output0))
 
         return predicted_y
 

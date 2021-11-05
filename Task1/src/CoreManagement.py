@@ -82,7 +82,8 @@ class CoreComponent:
         self.full_X = torch.autograd.Variable(torch.from_numpy(np.array(self.full_X)).float()).to(self.device)
         # self.full_Y = self.data_factory.process_dataset(self.full_Y) # Y data cannot be processed!
         self.log_factory.InfoLog("Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
-        self.full_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.full_Y)).float()).to(self.device)
+        self.full_Y = torch.autograd.Variable(
+            torch.from_numpy(np.array(self.full_Y).reshape(self.full_Y.shape[0], 1)).float()).to(self.device)
 
         self.log_factory.InfoLog("Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
         self.validation_X = torch.autograd.Variable(torch.from_numpy(np.array(self.validation_X)).float()).to(self.device)
@@ -92,7 +93,7 @@ class CoreComponent:
     def run(self):
         if self.model_name == "lasso":
             full_X = self.full_X.cpu().numpy()
-            full_Y = self.full_Y.cpu().squeeze(1).numpy()
+            full_Y = self.full_Y.cpu().numpy()
             reg = self.train_model(n_alphas=100, cv=self.k_fold, eps=1e-3, max_iter=5000, random_state=0,
                                    precompute=False).fit(full_X, full_Y)
             predicted_y_validate = reg.predict(self.validation_X.cpu().numpy())
@@ -101,7 +102,7 @@ class CoreComponent:
             self.log_factory.InfoLog("all score = {}".format(r2_score(full_Y, predicted_y_full)))
         elif self.model_name == 'ridge':
             full_X = self.full_X.cpu().numpy()
-            full_Y = self.full_Y.cpu().squeeze(1).numpy()
+            full_Y = self.full_Y.cpu().numpy()
             """
             params: cv=k-fold //为None时使用loocv来验证，但是score会用mse而不是r2score
                     alphas=[...] //里面是我们备选的所有正则化参数
