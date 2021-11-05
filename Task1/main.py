@@ -7,11 +7,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='ridge', choices=['lasso', 'ridge', 'nnet'], help='type of model')
     parser.add_argument('--imputer', type=str,
-                        default='knn',
-                        choices=['knn', 'mean', 'else'], help='type of imputer')
+                        default='mice',
+                        choices=['gain', 'knn', 'mice', 'mean', 'else'], help='type of imputer')
     parser.add_argument('--outlier', type=str,
                         default='isolationforest',
-                        choices=['zscore', 'isolationforest', 'else'], help='type of outlier')
+                        choices=['zscore', 'local', 'isolationforest', 'else'], help='type of outlier')
     parser.add_argument('--pca', type=str,
                         default='tree',
                         choices=['pca', 'tree', 'lasso', 'else'], help='type of feature selection')

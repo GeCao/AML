@@ -48,7 +48,7 @@ class CoreComponent:
 
     def initialization(self):
         self.log_factory.initialization()
-        self.log_factory.Slog(MessageAttribute.EInfo, sentences="Log Factory fully created")
+        self.log_factory.InfoLog(sentences="Log Factory fully created")
 
         self.data_factory.initialization()
 
@@ -61,17 +61,16 @@ class CoreComponent:
         full_X_shape_0 = self.full_X.shape[0]
         validation_X_shape_0 = self.validation_X.shape[0]
         full_validation_X = np.concatenate((self.full_X, self.validation_X), axis=0)
-        full_validation_X = self.data_factory.process_dataset(full_validation_X, impute_method=self.imputer,
-                                                              outlier_method=self.outlier, rows_X=full_X_shape_0)
-        self.full_Y = self.data_factory.process_dataset(self.full_Y, impute_method=self.imputer,
-                                                        outlier_method='else')
+
+        full_validation_X, self.full_Y = self.data_factory.process_dataset(full_validation_X, self.full_Y,
+                                                                           impute_method=self.imputer,
+                                                                           outlier_method=self.outlier)
         self.full_normalizer.initialization(full_validation_X)
         full_validation_X = self.full_normalizer.encode(full_validation_X)
         full_X_shape_0 = len(self.full_Y)
         full_validation_X, self.full_Y = self.data_factory.feature_selection(full_validation_X, self.full_Y,
                                                                              method=self.pca, rows_X=full_X_shape_0)
-        self.log_factory.Slog(MessageAttribute.EInfo,
-                              sentences="After feature selection, the shape of X = {}".format(full_validation_X.shape))
+        self.log_factory.InfoLog("After feature selection, the shape of X = {}".format(full_validation_X.shape))
         self.full_X = full_validation_X[:full_X_shape_0, :]
         self.validation_X = full_validation_X[-validation_X_shape_0:, :]
 
@@ -79,16 +78,13 @@ class CoreComponent:
         # self.full_Y = self.y_normalizer.encode(self.full_Y)
 
         # 3. transfer numpy data to Tensor data
-        self.log_factory.Slog(MessageAttribute.EInfo,
-                              sentences="Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
+        self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
         self.full_X = torch.autograd.Variable(torch.from_numpy(np.array(self.full_X)).float()).to(self.device)
         # self.full_Y = self.data_factory.process_dataset(self.full_Y) # Y data cannot be processed!
-        self.log_factory.Slog(MessageAttribute.EInfo,
-                              sentences="Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
+        self.log_factory.InfoLog("Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
         self.full_Y = torch.autograd.Variable(torch.from_numpy(np.array(self.full_Y)).float()).to(self.device)
 
-        self.log_factory.Slog(MessageAttribute.EInfo,
-                              sentences="Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
+        self.log_factory.InfoLog("Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
         self.validation_X = torch.autograd.Variable(torch.from_numpy(np.array(self.validation_X)).float()).to(self.device)
 
         self.initialized = True
@@ -102,8 +98,7 @@ class CoreComponent:
             predicted_y_validate = reg.predict(self.validation_X.cpu().numpy())
             predicted_y_full = reg.predict(full_X)
             self.dump_validated_y(predicted_y_validate)
-            self.log_factory.Slog(MessageAttribute.EInfo,
-                                  "all score = {}".format(r2_score(full_Y, predicted_y_full)))
+            self.log_factory.InfoLog("all score = {}".format(r2_score(full_Y, predicted_y_full)))
         elif self.model_name == 'ridge':
             full_X = self.full_X.cpu().numpy()
             full_Y = self.full_Y.cpu().squeeze(1).numpy()
@@ -116,8 +111,7 @@ class CoreComponent:
             predicted_y_validate = reg.predict(self.validation_X.cpu().numpy())
             predicted_y_full = reg.predict(full_X)
             self.dump_validated_y(predicted_y_validate)
-            self.log_factory.Slog(MessageAttribute.EInfo,
-                                  "all score = {}".format(r2_score(full_Y, predicted_y_full)))
+            self.log_factory.InfoLog("all score = {}".format(r2_score(full_Y, predicted_y_full)))
         elif self.model_name == "nnet":
             self.train_model.initialization()
             computed_losses = []
@@ -158,8 +152,7 @@ class CoreComponent:
                         test_r2_score = r2_score(test_Y.cpu().numpy(), predicted_y_test.cpu().numpy())
 
                 if epoch % 200 == 0:
-                    self.log_factory.Slog(MessageAttribute.EInfo,
-                            sentences="Epoch={}, while test loss={}, train loss = {}, r2_score = {}".format(epoch, test_loss, train_loss, test_r2_score))
+                    self.log_factory.InfoLog("Epoch={}, while test loss={}, train loss = {}, r2_score = {}".format(epoch, test_loss, train_loss, test_r2_score))
                     computed_losses.append(test_loss.detach().clone().cpu())
                     train_losses.append(train_loss)
                     with torch.no_grad():

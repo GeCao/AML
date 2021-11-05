@@ -3,9 +3,11 @@ import os
 import numpy as np
 import pandas as pd
 from scipy import stats
-from sklearn.impute import SimpleImputer, KNNImputer
+from .data_utils.gain_imputer import GAINImputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import SimpleImputer, KNNImputer, MissingIndicator, IterativeImputer
 from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
-from sklearn.neighbors import KNeighborsRegressor
+from sklearn.neighbors import KNeighborsRegressor, LocalOutlierFactor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.svm import LinearSVC
@@ -13,46 +15,72 @@ from sklearn.feature_selection import SelectFromModel
 
 
 class DataFactory:
-    train_dataset_filter = None 
-    # to filter y_train when x_train is trimmed 
-
     def __init__(self, core_management):
         self.core_management = core_management
 
         self.anomalies_ratio = 0.2  # 预测样本中outlier的比例
         self.max_features = 200
 
+        self.gain_imputer = GAINImputer(self.core_management)
+
+        self.train_dataset_filter = None  # to filter y_train when x_train is trimmed
+        self.nan_indicator_mat = None
+
         self.initialized = False
 
     def initialization(self):
         self.initialized = True
 
-    def outlier_detect_data(self, df_data, method='zscore', rows_X=0):
+    def outlier_detect_data(self, X, y=None, method='zscore'):
         # make these outlier entries nan
-        if method == 'zscore': 
-            z_scores = stats.zscore(df_data)
+        if method == 'zscore':
+            z_scores = stats.zscore(X)
             abs_z_scores = np.abs(z_scores)
             filtered_entries = (abs_z_scores > 3)
-            df_data[filtered_entries] = nan
-            new_df = df_data 
-            # new_df = df_data[filtered_entries]
+            X[filtered_entries] = nan
+            if y is None:
+                return X, y
+
+            z_scores = stats.zscore(y)
+            abs_z_scores = np.abs(z_scores)
+            filtered_entries = (abs_z_scores > 3)
+            y[filtered_entries] = nan
+        elif method == 'local':
+            rows_X = y.shape[0]
+            X_y = np.concatenate((X[:rows_X, ...], y.reshape((rows_X, 1))), axis=1)
+            model = LocalOutlierFactor(novelty=True)
+            model.fit(X_y)
+            if_predict = model.predict(X_y)
+            if_filter = if_predict > 0  # map +1/-1 to True/False
+            if self.nan_indicator_mat is not None:
+                self.nan_indicator_mat = np.concatenate((self.nan_indicator_mat[:rows_X, ...][if_filter],
+                                                         self.nan_indicator_mat[rows_X:, ...]),
+                                                        axis=0)  # this part is readied for future impute
+
+            if_X_y = X_y[:rows_X][if_filter]
+            X = np.concatenate((if_X_y[:, :-1], X[rows_X:]), axis=0)
+            y = if_X_y[:, -1]
         elif method == 'isolationforest':
+            rows_X = y.shape[0]
+            X_y = np.concatenate((X[:rows_X, ...], y.reshape((rows_X, 1))), axis=1)
             if_sk = IsolationForest(n_estimators=100,
                                     max_samples="auto",
                                     contamination=self.anomalies_ratio,
                                     random_state=np.random.RandomState(42))
-            if_sk.fit(df_data)
-            if_predict = if_sk.predict(df_data)
+            if_sk.fit(X_y)
+            if_predict = if_sk.predict(X_y)
             if_filter = if_predict > 0  # map +1/-1 to True/False
-            if_filter = if_filter[:rows_X] 
-            self.train_dataset_filter = if_filter 
-            
-            if_df = df_data[:rows_X][if_filter] 
-            zs_df = self.outlier_detect_data(df_data[rows_X:], 'zscore') 
-            new_df = np.concatenate((if_df, zs_df), axis=0)
+            if self.nan_indicator_mat is not None:
+                self.nan_indicator_mat = np.concatenate((self.nan_indicator_mat[:rows_X, ...][if_filter],
+                                                         self.nan_indicator_mat[rows_X:, ...]),
+                                                        axis=0)  # this part is readied for future impute
+
+            if_X_y = X_y[:rows_X][if_filter]
+            X = np.concatenate((if_X_y[:, :-1], X[rows_X:]), axis=0)
+            y = if_X_y[:, -1]
         else:
-            new_df = df_data
-        return new_df
+            X, y = X, y
+        return X, y
 
     def feature_selection(self, X, y, method='pca', rows_X=None):
         train_X = X
@@ -81,40 +109,36 @@ class DataFactory:
         else:
             return X, y
 
-    def impute_data(self, df_data, method='else'):
+    def impute_data(self, X, y, method='else'):
         """
 
-        :param df_data: our data with DataFrame mode
+        :param np_data: our data with DataFrame mode
         :param method: several choices:
                        1. 'knn': instead of 'nan' values in every column, we predict them with a simple knn algorithm,
                                  the train dataset comes from all the other non-nan data in this column
-                       2. 'delete': delete every row as long as it got a nan number in any column,
-                                    this is a rather dummy way for data cleaning
-                       3. else: use the internal implementation of sklearn, choose 'mean' or 'median' strategy for predict.
+                       2. else: use the internal implementation of sklearn, choose 'mean' or 'median' strategy for predict.
         :return:
         """
         if method == 'knn':
-            """
-            column_name_list = df_data.columns.tolist()
-            for col_name in column_name_list:
-                if df_data[col_name].isna().any():
-                    nan_part = df_data[df_data[col_name].isna()]
-                    real_part = df_data[col_name].dropna()
-                    # model = KNeighborsRegressor(n_neighbors=5).fit()
-                    return df_data
-            """
             knn_imputer = KNNImputer(n_neighbors=5)
-            df_data = knn_imputer.fit_transform(df_data)
-            return df_data
-        elif method == 'delete':
-            df_data = df_data.dropna(axis=0, how='any')  # Delete this row as long as a nan has been detected
-            return df_data
+            X = knn_imputer.fit_transform(X)
+            y = knn_imputer.fit_transform(y.reshape(y.shape[0], 1))
+            return X, y
+        elif method == 'mice':
+            mice_imputer = IterativeImputer(max_iter=10, random_state=0)
+            X = mice_imputer.fit_transform(X)
+            y = mice_imputer.fit_transform(y)
+            return X, y
         elif method == 'mean':
-            df_data = SimpleImputer(missing_values=np.nan, strategy="mean").fit(
-                df_data).transform(df_data)
-            return df_data
+            mean_imputer = SimpleImputer(missing_values=np.nan, strategy="mean")
+            X = mean_imputer.fit_transform(X)
+            y = mean_imputer.fit_transform(y)
+            return X, y
+        elif method == 'gain':
+            self.gain_imputer.initialization(X)
+            return self.gain_imputer.train(), KNNImputer(n_neighbors=5).fit_transform(y.reshape(y.shape[0], 1))
         else:
-            return df_data
+            return X, y
 
     def read_dataset(self, file_path):
         """
@@ -135,18 +159,12 @@ class DataFactory:
 
         return data.to_numpy()
 
-    def process_dataset(self, data, impute_method='knn', outlier_method='zscore', pca_method='pca', rows_X=0):
-        # read_dataset() must be followed by the process_dataset()
-        # rows_X to help not to delete outliers of x_test
-        if self.train_dataset_filter is not None:
-            # trim Y according to X
-            data = data[self.train_dataset_filter]
-        data = self.impute_data(data, impute_method)
-        data = self.outlier_detect_data(data, outlier_method, rows_X)
-        data = self.impute_data(data, impute_method)
+    def process_dataset(self, X, y, impute_method='knn', outlier_method='zscore'):
+        missing_indicator = MissingIndicator(missing_values=nan, features='all')
+        self.nan_indicator_mat = missing_indicator.fit_transform(X)  # 得到一个与data同shape的矩阵，True代表有nan，False代表正常数据
 
-        try:
-            data = data.to_numpy()
-        except:
-            pass
-        return data 
+        X, y = self.impute_data(X, y, 'knn')  # knn对outlier非常敏感，因此这只是一个为了outlier detection做出的预处理
+        X, y = self.outlier_detect_data(X, y, outlier_method)
+        X = np.where(self.nan_indicator_mat, nan, X)  # 此前用knn做的impute非常差，所以我们要重新mask掉，然后做最终的impute
+        X, y = self.impute_data(X, y, impute_method)
+        return X, y

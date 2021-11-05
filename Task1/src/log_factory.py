@@ -33,6 +33,15 @@ class LogFactory:
 
         self.initialized = True
 
+    def WarnLog(self, sentences=""):
+        self.Slog(message_attribute=MessageAttribute.EWarn, sentences=sentences)
+
+    def InfoLog(self, sentences=""):
+        self.Slog(message_attribute=MessageAttribute.EInfo, sentences=sentences)
+
+    def ErrorLog(self, sentences=""):
+        self.Slog(message_attribute=MessageAttribute.EError, sentences=sentences)
+
     def Slog(self, message_attribute=MessageAttribute(0), sentences=""):
         str_curr_time = time.strftime('[%Y-%m-%d %H:%M:%S] (', time.localtime(time.time()))
         prefix_str = ""
