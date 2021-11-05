@@ -9,12 +9,11 @@ class MyNNet(MyModel):
     def __init__(self, core_management):
         super(MyNNet, self).__init__(core_management)
 
-        self.hideen_dim_0 = 256
-        self.hideen_dim_1 = 128
-        self.hideen_dim_2 = 64
-        self.hideen_dim_3 = 64
-        self.hideen_dim_4 = 128
-        self.hideen_dim_5 = 256
+        self.hideen_dim_0 = 100
+        self.hideen_dim_1 = 20
+        # self.hideen_dim_2 = 50
+        # self.hideen_dim_4 = 128
+        # self.hideen_dim_5 = 256
 
         '''
         self.hideen_dim_0 = 512
@@ -34,7 +33,7 @@ class MyNNet(MyModel):
         self.layer5 = None
         self.layer6 = None
 
-        self.regularization = 1e-5
+        self.regularization = 0
 
         self.initialized = False
 
@@ -45,20 +44,13 @@ class MyNNet(MyModel):
 
         self.layer0 = torch.nn.Linear(self.input_dimension, self.hideen_dim_0).to(self.device)
         self.layer1 = torch.nn.Linear(self.hideen_dim_0, self.hideen_dim_1).to(self.device)
-        self.layer2 = torch.nn.Linear(self.hideen_dim_1, self.hideen_dim_2).to(self.device)
-        self.layer3 = torch.nn.Linear(self.hideen_dim_2, self.hideen_dim_3).to(self.device)
-        self.layer4 = torch.nn.Linear(self.hideen_dim_3, self.hideen_dim_4).to(self.device)
-        self.layer5 = torch.nn.Linear(self.hideen_dim_4, self.hideen_dim_5).to(self.device)
-        self.layer6 = torch.nn.Linear(self.hideen_dim_5, 1).to(self.device)
+        self.layer2 = torch.nn.Linear(self.hideen_dim_1, 1).to(self.device)
 
         # self.loss = R2Score(self.core_management.train_Y, self.core_management.device, self.regularization)
         self.loss = MyLoss(regularization=self.regularization)
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=0.1)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=0.01)
 
         self.initialized = True
-
-    def outlier_handling(self):
-        pass
 
     def forward(self, input):
         output0 = F.leaky_relu_(self.layer0(input))
@@ -66,15 +58,7 @@ class MyNNet(MyModel):
 
         output1 = F.leaky_relu_(self.layer1(output0_halv))
 
-        output2 = F.leaky_relu_(self.layer2(output1))
-
-        output3 = F.leaky_relu_(self.layer3(output2))
-
-        output4 = F.leaky_relu_(self.layer4(output3))
-
-        output5 = F.leaky_relu_(self.layer5(output4))
-
-        predicted_y = F.leaky_relu_(self.layer6(output5))
+        predicted_y = F.leaky_relu_(self.layer2(output1))
 
         return predicted_y
 
