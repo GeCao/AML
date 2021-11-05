@@ -12,6 +12,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.svm import LinearSVC
 from sklearn.feature_selection import SelectFromModel
+from sklearn.linear_model import LassoCV
 
 
 class DataFactory:
@@ -100,10 +101,18 @@ class DataFactory:
             model = SelectFromModel(clf, prefit=True, threshold=-np.inf, max_features=self.max_features)
             X = model.transform(X)
             return X, y
-        elif method == 'lasso':
+        elif method == 'lsvc':
             lsvc = LinearSVC(C=0.01, penalty="l1", dual=False).fit(train_X, y.astype('int'))
             print(lsvc.score(train_X, y))
             model = SelectFromModel(lsvc, prefit=True, threshold=-np.inf, max_features=self.max_features)
+            X = model.transform(X)
+            return X, y
+        elif method == 'lasso':
+            lasso = LassoCV(tol=9.5, max_iter=10000).fit(train_X, y.ravel())
+            importance = np.abs(lasso.coef_)
+            threshold = min(i for i in importance if i >0)-0.0001
+            print(lasso.score(train_X, y))
+            model = SelectFromModel(lasso, threshold=threshold).fit(train_X,y.ravel())
             X = model.transform(X)
             return X, y
         else:
