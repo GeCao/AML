@@ -26,6 +26,9 @@ class CoreComponent:
             self.train_model = LassoCV
         elif self.model_name == 'nnet':
             self.train_model = MyNNet(self)
+        elif self.model_name == 'ridge':
+            from sklearn.linear_model import RidgeCV
+            self.train_model = RidgeCV
         else:
             self.train_model = None
 
@@ -39,7 +42,7 @@ class CoreComponent:
         self.validation_X = None
         self.validation_Y = None
 
-        self.k_fold = 5
+        self.k_fold = 10
 
         self.initialized = False
 
@@ -94,7 +97,22 @@ class CoreComponent:
         if self.model_name == "lasso":
             full_X = self.full_X.cpu().numpy()
             full_Y = self.full_Y.cpu().squeeze(1).numpy()
-            reg = self.train_model(n_alphas=10, cv=self.k_fold, eps=1e-3, max_iter=500).fit(full_X, full_Y)
+            reg = self.train_model(n_alphas=100, cv=self.k_fold, eps=1e-3, max_iter=5000, random_state=0,
+                                   precompute=False).fit(full_X, full_Y)
+            predicted_y_validate = reg.predict(self.validation_X.cpu().numpy())
+            predicted_y_full = reg.predict(full_X)
+            self.dump_validated_y(predicted_y_validate)
+            self.log_factory.Slog(MessageAttribute.EInfo,
+                                  "all score = {}".format(r2_score(full_Y, predicted_y_full)))
+        elif self.model_name == 'ridge':
+            full_X = self.full_X.cpu().numpy()
+            full_Y = self.full_Y.cpu().squeeze(1).numpy()
+            """
+            params: cv=k-fold //为None时使用loocv来验证，但是score会用mse而不是r2score
+                    alphas=[...] //里面是我们备选的所有正则化参数
+                    fit_intercept=True //default就是True，指在拟合时是否需要截距（当然需要）
+            """
+            reg = self.train_model(alphas=[1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10.0], cv=self.k_fold).fit(full_X, full_Y)
             predicted_y_validate = reg.predict(self.validation_X.cpu().numpy())
             predicted_y_full = reg.predict(full_X)
             self.dump_validated_y(predicted_y_validate)

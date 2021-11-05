@@ -18,6 +18,10 @@ class DataFactory:
 
     def __init__(self, core_management):
         self.core_management = core_management
+
+        self.anomalies_ratio = 0.2  # 预测样本中outlier的比例
+        self.max_features = 200
+
         self.initialized = False
 
     def initialization(self):
@@ -33,11 +37,9 @@ class DataFactory:
             new_df = df_data 
             # new_df = df_data[filtered_entries]
         elif method == 'isolationforest':
-            anomalies_ratio = 0.2  # 预测样本中outlier的比例
-
             if_sk = IsolationForest(n_estimators=100,
                                     max_samples="auto",
-                                    contamination=anomalies_ratio,
+                                    contamination=self.anomalies_ratio,
                                     random_state=np.random.RandomState(42))
             if_sk.fit(df_data)
             if_predict = if_sk.predict(df_data)
@@ -66,13 +68,14 @@ class DataFactory:
             return df, y
         elif method == 'tree':
             clf = ExtraTreesClassifier(n_estimators=50)
-            clf = clf.fit(train_X, y)
-            model = SelectFromModel(clf, prefit=True, threshold=-np.inf, max_features=200)
+            clf = clf.fit(train_X, y.astype('int'))
+            model = SelectFromModel(clf, prefit=True, threshold=-np.inf, max_features=self.max_features)
             X = model.transform(X)
             return X, y
         elif method == 'lasso':
-            lsvc = LinearSVC(C=0.01, penalty="l1", dual=False).fit(train_X, y)
-            model = SelectFromModel(lsvc, prefit=True, threshold=-np.inf, max_features=200)
+            lsvc = LinearSVC(C=0.01, penalty="l1", dual=False).fit(train_X, y.astype('int'))
+            print(lsvc.score(train_X, y))
+            model = SelectFromModel(lsvc, prefit=True, threshold=-np.inf, max_features=self.max_features)
             X = model.transform(X)
             return X, y
         else:
@@ -107,9 +110,8 @@ class DataFactory:
             df_data = df_data.dropna(axis=0, how='any')  # Delete this row as long as a nan has been detected
             return df_data
         elif method == 'mean':
-            arr = SimpleImputer(missing_values=np.nan, strategy="mean").fit(
-                df_data.values).transform(df_data.values)
-            df_data = pd.DataFrame(data=arr, index=df_data.index.values, columns=df_data.columns.values)
+            df_data = SimpleImputer(missing_values=np.nan, strategy="mean").fit(
+                df_data).transform(df_data)
             return df_data
         else:
             return df_data

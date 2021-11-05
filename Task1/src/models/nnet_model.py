@@ -9,9 +9,9 @@ class MyNNet(MyModel):
     def __init__(self, core_management):
         super(MyNNet, self).__init__(core_management)
 
-        self.hideen_dim_0 = 100
-        self.hideen_dim_1 = 20
-        # self.hideen_dim_2 = 50
+        self.hideen_dim_0 = 200
+        self.hideen_dim_1 = 50
+        self.hideen_dim_2 = 25
         # self.hideen_dim_4 = 128
         # self.hideen_dim_5 = 256
 
@@ -33,18 +33,19 @@ class MyNNet(MyModel):
         self.layer5 = None
         self.layer6 = None
 
-        self.regularization = 0
+        self.regularization = 3e-4
 
         self.initialized = False
 
     def initialization(self):
         self.batch_size, self.input_dimension = self.core_management.full_X.shape
         self.input_dimension = self.input_dimension
-        self.total_epoch = 10000
+        self.total_epoch = 100000
 
         self.layer0 = torch.nn.Linear(self.input_dimension, self.hideen_dim_0).to(self.device)
         self.layer1 = torch.nn.Linear(self.hideen_dim_0, self.hideen_dim_1).to(self.device)
-        self.layer2 = torch.nn.Linear(self.hideen_dim_1, 1).to(self.device)
+        self.layer2 = torch.nn.Linear(self.hideen_dim_1, self.hideen_dim_2).to(self.device)
+        self.layer3 = torch.nn.Linear(self.hideen_dim_2, 1).to(self.device)
 
         # self.loss = R2Score(self.core_management.train_Y, self.core_management.device, self.regularization)
         self.loss = MyLoss(regularization=self.regularization)
@@ -54,11 +55,13 @@ class MyNNet(MyModel):
 
     def forward(self, input):
         output0 = F.leaky_relu_(self.layer0(input))
-        output0_halv = F.dropout(output0, p=0.5)
+        output0_halv = F.dropout(output0, p=0.25)
 
         output1 = F.leaky_relu_(self.layer1(output0_halv))
 
-        predicted_y = F.leaky_relu_(self.layer2(output1))
+        output2 = F.leaky_relu_(self.layer2(output1))
+
+        predicted_y = F.leaky_relu_(self.layer3(output2))
 
         return predicted_y
 

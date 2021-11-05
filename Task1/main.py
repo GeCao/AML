@@ -5,12 +5,12 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='nnet', choices=['lasso', 'nnet'], help='type of device')
+    parser.add_argument('--model', type=str, default='ridge', choices=['lasso', 'ridge', 'nnet'], help='type of model')
     parser.add_argument('--imputer', type=str,
                         default='knn',
                         choices=['knn', 'mean', 'else'], help='type of imputer')
     parser.add_argument('--outlier', type=str,
-                        default='zscore',
+                        default='isolationforest',
                         choices=['zscore', 'isolationforest', 'else'], help='type of outlier')
     parser.add_argument('--pca', type=str,
                         default='tree',
