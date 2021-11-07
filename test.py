@@ -1,4 +1,4 @@
-"""
+'''
 from enum import Enum
 import torch
 
@@ -14,7 +14,7 @@ print(a.value == enum.EInfo.value)
 a = torch.Tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).to('cpu')
 print(a[3:5])
 print(a[(torch.arange(a.shape[0]) < 3) + (torch.arange(a.shape[0]) >= 5)])
-"""
+
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -277,3 +277,21 @@ for it in tqdm(range(5000)):
         print('Train_loss: {:.4}'.format(np.sqrt(MSE_train_loss_curr.item())))
         print('Test_loss: {:.4}'.format(np.sqrt(MSE_test_loss_curr.item())))
         print()
+
+'''
+import numpy as np
+import torch
+import random
+idx = [i for i in range(20)]
+indicator = np.array([False for i in range(20)])
+A = np.array([i + 0.1 for i in range(20)])
+A = torch.from_numpy(A)
+B = np.zeros(shape=(20, 8))
+B = torch.from_numpy(B)
+
+sampled_idx = random.sample(idx, 20)
+indicator[sampled_idx[5:10]] = True
+print(sampled_idx)
+print(indicator)
+sampled_B = B[indicator == False]
+print(sampled_B.shape)

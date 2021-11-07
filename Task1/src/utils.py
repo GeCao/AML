@@ -17,6 +17,6 @@ def model_evaluation(computed_losses, train_losses, epoch_step=200):
     plt.plot(epochs, computed_losses, 'orange', label="test")
     plt.plot(epochs, train_losses, 'b', label="train")
     plt.ylabel("loss")
-    plt.ylim(0, 100)
+    plt.ylim(0, 1)
     plt.legend()
     plt.show()

@@ -19,7 +19,7 @@ class DataFactory:
     def __init__(self, core_management):
         self.core_management = core_management
 
-        self.anomalies_ratio = 0.2  # 预测样本中outlier的比例
+        self.anomalies_ratio = 0.25  # 预测样本中outlier的比例
         self.max_features = 200
 
         self.gain_imputer = GAINImputer(self.core_management)

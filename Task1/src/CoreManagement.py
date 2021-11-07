@@ -1,6 +1,8 @@
 import os
+import random
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from .data_factory import DataFactory
 from .log_factory import LogFactory
@@ -56,6 +58,7 @@ class CoreComponent:
         self.full_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"))
         self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
         self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
+        self.validation_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_validate.csv"))
 
         # 2. process X files together
         full_X_shape_0 = self.full_X.shape[0]
@@ -74,8 +77,8 @@ class CoreComponent:
         self.full_X = full_validation_X[:full_X_shape_0, :]
         self.validation_X = full_validation_X[-validation_X_shape_0:, :]
 
-        # self.y_normalizer.initialization(self.full_Y)
-        # self.full_Y = self.y_normalizer.encode(self.full_Y)
+        self.y_normalizer.initialization(self.full_Y)
+        self.full_Y = self.y_normalizer.encode(self.full_Y)
 
         # 3. transfer numpy data to Tensor data
         self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
@@ -85,8 +88,10 @@ class CoreComponent:
         self.full_Y = torch.autograd.Variable(
             torch.from_numpy(np.array(self.full_Y).reshape(self.full_Y.shape[0], 1)).float()).to(self.device)
 
-        self.log_factory.InfoLog("Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
-        self.validation_X = torch.autograd.Variable(torch.from_numpy(np.array(self.validation_X)).float()).to(self.device)
+        self.log_factory.InfoLog(
+            "Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
+        self.validation_X = torch.autograd.Variable(torch.from_numpy(np.array(self.validation_X)).float()).to(
+            self.device)
 
         self.initialized = True
 
@@ -111,7 +116,7 @@ class CoreComponent:
             reg = self.train_model(alphas=[1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 10.0], cv=self.k_fold).fit(full_X, full_Y)
             predicted_y_validate = reg.predict(self.validation_X.cpu().numpy())
             predicted_y_full = reg.predict(full_X)
-            self.dump_validated_y(predicted_y_validate)
+            self.dump_validated_y(predicted_y_validate.squeeze(1))
             self.log_factory.InfoLog("all score = {}".format(r2_score(full_Y, predicted_y_full)))
         elif self.model_name == "nnet":
             self.train_model.initialization()
@@ -123,22 +128,23 @@ class CoreComponent:
 
                 test_loss = 0.0
                 train_loss = 0.0
+                test_mse = 0.0
+                train_mse = 0.0
                 test_r2_score = 0.0
                 self.train_model.train()
+                idx = [i for i in range(self.full_X.shape[0])]
+                sampled_idx = random.sample(idx, self.full_Y.shape[0])
                 for i in range(self.k_fold):
+                    indicator = np.array([False for i in range(self.full_X.shape[0])])
                     if i != self.k_fold - 1:
-                        # k-fold CV
-                        train_X = self.full_X[
-                            (torch.arange(self.full_X.shape[0]) < i*stride) + (torch.arange(self.full_X.shape[0]) >= (i + 1)*stride)]
-                        train_Y = self.full_Y[
-                            (torch.arange(self.full_X.shape[0]) < i*stride) + (torch.arange(self.full_X.shape[0]) >= (i + 1)*stride)]
-                        test_X = self.full_X[i*stride: (i + 1)*stride, :]
-                        test_Y = self.full_Y[i*stride: (i + 1)*stride, :]
+                        indicator[sampled_idx[i * stride: (i + 1) * stride]] = True
                     else:
-                        train_X = self.full_X[:i*stride, ...]
-                        train_Y = self.full_Y[:i*stride, ...]
-                        test_X = self.full_X[i * stride:, ...]
-                        test_Y = self.full_Y[i * stride:, ...]
+                        indicator[sampled_idx[i * stride:]] = True
+                    # k-fold CV
+                    train_X = self.full_X[indicator == False, :]
+                    train_Y = self.full_Y[indicator == False, :]
+                    test_X = self.full_X[indicator == True, :]
+                    test_Y = self.full_Y[indicator == True, :]
 
                     self.train_model.optimizer.zero_grad()
                     predicted_y = self.train_model(train_X)
@@ -147,18 +153,21 @@ class CoreComponent:
                     self.train_model.optimizer.step()
 
                     with torch.no_grad():
-                        train_loss = temp_loss.detach().clone().cpu()
+                        train_loss += temp_loss.item() / self.k_fold
                         predicted_y_test = self.train_model(test_X)
-                        test_loss += self.train_model.compute_loss(predicted_y_test, test_Y)
-                        test_r2_score = r2_score(test_Y.cpu().numpy(), predicted_y_test.cpu().numpy())
+                        test_loss += self.train_model.compute_loss(predicted_y_test, test_Y) / self.k_fold
+                        train_mse += F.mse_loss(predicted_y, train_Y) / self.k_fold
+                        test_mse += F.mse_loss(predicted_y_test, test_Y) / self.k_fold
+                        test_r2_score += r2_score(test_Y.cpu().numpy(), predicted_y_test.cpu().numpy()) / self.k_fold
 
                 if epoch % 200 == 0:
-                    self.log_factory.InfoLog("Epoch={}, while test loss={}, train loss = {}, r2_score = {}".format(epoch, test_loss, train_loss, test_r2_score))
+                    self.log_factory.InfoLog(
+                        "Epoch={}, while test loss={}, train loss={}, test MSE={}, train MSE={}, r2_score={}".format(
+                            epoch, test_loss, train_loss, test_mse, train_mse, test_r2_score))
                     computed_losses.append(test_loss.detach().clone().cpu())
                     train_losses.append(train_loss)
                     with torch.no_grad():
                         predicted_y_validate = self.train_model(self.validation_X).squeeze(1).cpu().numpy()
-                        # predicted_y_validate = self.y_normalizer.decode(predicted_y_validate)
                         self.dump_validated_y(predicted_y_validate)
             model_evaluation(computed_losses, train_losses, epoch_step=200)
 
@@ -166,10 +175,21 @@ class CoreComponent:
         self.log_factory.kill()
 
     def dump_validated_y(self, predicted_y_validate):
+        np_full_Y = self.full_Y
         try:
+            np_full_Y = self.full_Y.squeeze(1).cpu().numpy()
             predicted_y_validate = predicted_y_validate.cpu().numpy()
         except:
             pass
+
+        if self.y_normalizer.initialized:
+            predicted_y_validate = self.y_normalizer.decode(predicted_y_validate)
+            np_full_Y = self.y_normalizer.decode(np_full_Y)
+
+        fig = plt.figure(1)
+        plt.scatter([1 for i in range(self.full_Y.shape[0])], np_full_Y, edgecolors='r')
+        plt.scatter([2 for i in range(len(self.validation_Y))], self.validation_Y, edgecolors='b')
+        fig.savefig(os.path.join(self.data_path, "distribution.png"))
 
         with open(os.path.join(self.data_path, "y_validate.csv"), 'w') as f:
             f.write("id,y\n")
