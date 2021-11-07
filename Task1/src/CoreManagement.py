@@ -1,4 +1,4 @@
-import os
+import os, time, math
 import random
 import numpy as np
 import torch
@@ -42,13 +42,14 @@ class CoreComponent:
         self.full_X = None
         self.full_Y = None
         self.validation_X = None
-        self.validation_Y = None
 
         self.k_fold = 10
+        self.train_percent = 0.99
 
         self.initialized = False
 
     def initialization(self):
+        random.seed(0)
         self.log_factory.initialization()
         self.log_factory.InfoLog(sentences="Log Factory fully created")
 
@@ -58,7 +59,6 @@ class CoreComponent:
         self.full_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"))
         self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
         self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
-        self.validation_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_validate.csv"))
 
         # 2. process X files together
         full_X_shape_0 = self.full_X.shape[0]
@@ -77,8 +77,8 @@ class CoreComponent:
         self.full_X = full_validation_X[:full_X_shape_0, :]
         self.validation_X = full_validation_X[-validation_X_shape_0:, :]
 
-        self.y_normalizer.initialization(self.full_Y)
-        self.full_Y = self.y_normalizer.encode(self.full_Y)
+        # self.y_normalizer.initialization(self.full_Y)
+        # self.full_Y = self.y_normalizer.encode(self.full_Y)
 
         # 3. transfer numpy data to Tensor data
         self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
@@ -118,6 +118,76 @@ class CoreComponent:
             predicted_y_full = reg.predict(full_X)
             self.dump_validated_y(predicted_y_validate.squeeze(1))
             self.log_factory.InfoLog("all score = {}".format(r2_score(full_Y, predicted_y_full)))
+        elif self.model_name == "mlp":
+            from sklearn.ensemble import ExtraTreesRegressor
+            from sklearn.model_selection import RandomizedSearchCV, GridSearchCV, cross_val_score
+            from sklearn.neural_network import MLPRegressor
+
+            row_idx = [i for i in range(self.full_X.shape[0])]
+            random.shuffle(row_idx)
+            train_X = self.full_X[0:math.floor(len(row_idx) * self.train_percent), ...].cpu().numpy()
+            val_X = self.full_X[train_X.shape[0]:, ...].cpu().numpy()
+            train_Y = self.full_Y[0:train_X.shape[0], ...].cpu().numpy()
+            val_Y = self.full_Y[train_X.shape[0]:, ...].cpu().numpy()
+
+            n_estimators = [int(x) for x in np.linspace(start=1000, stop=2000, num=10)]
+            max_features = ['auto', 'sqrt']
+            max_depth = [int(x) for x in np.linspace(10, 110, num=5)]
+            max_depth.append(None)
+            min_samples_split = [2, 5, 10]
+            min_samples_leaf = [1, 2, 4]
+            bootstrap = [True, False]
+            random_grid = {'n_estimators': n_estimators,
+                           'max_features': max_features,
+                           'max_depth': max_depth,
+                           'min_samples_split': min_samples_split,
+                           'min_samples_leaf': min_samples_leaf,
+                           'bootstrap': bootstrap}
+            print(random_grid)
+
+            est = ExtraTreesRegressor()
+            rf_random = RandomizedSearchCV(estimator=est, param_distributions=random_grid, n_iter=100, cv=3, verbose=1,
+                                           n_jobs=-1)
+            rf_random.fit(train_X, train_Y)
+            rf_random.best_params_
+
+            parameter_grid = {'learning_rate': ['constant', 'invscaling', 'adaptive']}
+
+            start_time = time.time()
+
+            regf_grid = GridSearchCV(MLPRegressor(max_iter=10000, activation='tanh', solver='sgd'), parameter_grid,
+                                     n_jobs=-1)
+            regf_grid.fit(train_X, train_Y)
+
+            print('{} seconds'.format(round(time.time() - start_time)))
+            print()
+            print("Best parameters set found on development set:")
+            print(regf_grid.best_params_)
+            print()
+            print("Grid scores on development set:")
+            means = regf_grid.cv_results_['mean_test_score']
+            stds = regf_grid.cv_results_['std_test_score']
+            for mean, std, params in zip(means, stds, regf_grid.cv_results_['params']):
+                print("%0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
+
+            regf = ExtraTreesRegressor(n_estimators=1740, max_depth=53)
+            regf_cv = cross_val_score(regf, train_X, train_Y, cv=5, n_jobs=-1)
+
+            print("r2: %0.4f (+/- %0.2f)" % (regf_cv.mean(), regf_cv.std() * 2))
+
+            # extra trees regression
+            extra_tree = ExtraTreesRegressor(random_state=0, n_estimators=1740, max_depth=60, n_jobs=-1)
+            extra_tree.fit(train_X, train_Y)
+            extra_pred = extra_tree.predict(val_X)
+
+            self.log_factory.InfoLog("The score of extra_tree for validation={}".format(r2_score(val_Y, extra_pred)))
+
+            ID = np.array(range(len(val_X)))
+            import pandas as pd
+            df = pd.DataFrame({'id': ID,
+                               'y': extra_pred})
+            df.to_csv(os.path.join(self.data_path, 'prediction.csv'), index=False)
+            self.dump_validated_y(extra_tree.predict(self.validation_X.cpu().numpy()))
         elif self.model_name == "nnet":
             self.train_model.initialization()
             computed_losses = []
@@ -188,7 +258,7 @@ class CoreComponent:
 
         fig = plt.figure(1)
         plt.scatter([1 for i in range(self.full_Y.shape[0])], np_full_Y, edgecolors='r')
-        plt.scatter([2 for i in range(len(self.validation_Y))], self.validation_Y, edgecolors='b')
+        plt.scatter([2 for i in range(len(predicted_y_validate))], predicted_y_validate, edgecolors='b')
         fig.savefig(os.path.join(self.data_path, "distribution.png"))
 
         with open(os.path.join(self.data_path, "y_validate.csv"), 'w') as f:

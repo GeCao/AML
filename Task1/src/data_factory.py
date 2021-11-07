@@ -6,12 +6,13 @@ from scipy import stats
 from .data_utils.gain_imputer import GAINImputer
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import SimpleImputer, KNNImputer, MissingIndicator, IterativeImputer
-from sklearn.ensemble import IsolationForest, ExtraTreesClassifier
+from sklearn.ensemble import IsolationForest, ExtraTreesClassifier, ExtraTreesRegressor
 from sklearn.neighbors import KNeighborsRegressor, LocalOutlierFactor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.svm import LinearSVC
-from sklearn.feature_selection import SelectFromModel
+from sklearn.feature_selection import SelectFromModel, SelectKBest, f_regression, RFECV
+from sklearn.model_selection import KFold
 from sklearn.linear_model import LassoCV
 
 
@@ -33,6 +34,13 @@ class DataFactory:
         self.initialized = True
 
     def outlier_detect_data(self, X, y=None, method='zscore'):
+        """
+        There are only outliers in X_train & y_train dataset!
+        :param X:
+        :param y:
+        :param method:
+        :return:
+        """
         # make these outlier entries nan
         if method == 'zscore':
             z_scores = stats.zscore(X)
@@ -77,8 +85,17 @@ class DataFactory:
                                                         axis=0)  # this part is readied for future impute
 
             if_X_y = X_y[:rows_X][if_filter]
-            X = np.concatenate((if_X_y[:, :-1], X[rows_X:]), axis=0)
+            X = np.concatenate((if_X_y[:, :-1], X[rows_X:, :]), axis=0)
             y = if_X_y[:, -1]
+        elif method == 'iqr':
+            rows_X = y.shape[0]
+            X_y = np.concatenate((X[:rows_X, ...], y.reshape((rows_X, 1))), axis=1)
+            Q1 = np.quantile(X_y, 0.25)  # X_y.quantile(0.25)
+            Q3 = np.quantile(X_y, 0.75)  # X_y.quantile(0.75)
+            IQR = Q3 - Q1
+            X_y_no = X_y[~((X_y < (Q1 - 100 * IQR)) | (X_y > (Q3 + 100 * IQR))).any(axis=1)]
+            X = np.concatenate((X_y_no[:, :-1], X[rows_X:, :]), axis=0)
+            y = X_y_no[:, -1]
         else:
             X, y = X, y
         return X, y
@@ -95,6 +112,17 @@ class DataFactory:
             estimator = PCA(n_components=256)
             df = estimator.fit_transform(X)
             return df, y
+        elif method == 'kbest':
+            model = SelectKBest(score_func=f_regression, k=self.max_features)
+            model.fit(train_X, y)
+            X = model.transform(X)
+
+            rfecv = RFECV(estimator=ExtraTreesRegressor(n_estimators=1470, n_jobs=-1), step=1, cv=KFold(2), n_jobs=-1)
+            train_X = X[:rows_X, ...]
+            rfecv = rfecv.fit(train_X, y)
+            X = rfecv.transform(X)
+            print("Optimal number of features : %d" % rfecv.n_features_)
+            return X, y
         elif method == 'tree':
             clf = ExtraTreesClassifier(n_estimators=50)
             clf = clf.fit(train_X, y.astype('int'))
@@ -138,8 +166,8 @@ class DataFactory:
             X = mice_imputer.fit_transform(X)
             y = mice_imputer.fit_transform(y)
             return X, y
-        elif method == 'mean':
-            mean_imputer = SimpleImputer(missing_values=np.nan, strategy="mean")
+        elif method == 'mean' or method == 'median':
+            mean_imputer = SimpleImputer(missing_values=np.nan, strategy=method)
             X = mean_imputer.fit_transform(X)
             y = mean_imputer.fit_transform(y)
             return X, y

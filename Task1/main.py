@@ -5,16 +5,16 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='nnet', choices=['lasso', 'ridge', 'nnet'], help='type of model')
+    parser.add_argument('--model', type=str, default='mlp', choices=['mlp', 'lasso', 'ridge', 'nnet'], help='type of model')
     parser.add_argument('--imputer', type=str,
-                        default='knn',
-                        choices=['gain', 'knn', 'mice', 'mean', 'else'], help='type of imputer')
+                        default='median',
+                        choices=['gain', 'knn', 'mice', 'mean', 'median', 'else'], help='type of imputer')
     parser.add_argument('--outlier', type=str,
-                        default='isolationforest',
-                        choices=['zscore', 'local', 'isolationforest', 'else'], help='type of outlier')
+                        default='else',
+                        choices=['zscore', 'iqr', 'local', 'isolationforest', 'else'], help='type of outlier')
     parser.add_argument('--pca', type=str,
-                        default='tree',
-                        choices=['pca', 'tree', 'lsvc', 'lasso', 'else'], help='type of feature selection')
+                        default='kbest',
+                        choices=['pca', 'kbest', 'tree', 'lsvc', 'lasso', 'else'], help='type of feature selection')
     parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'], help='type of device')
 
     args = parser.parse_args()
