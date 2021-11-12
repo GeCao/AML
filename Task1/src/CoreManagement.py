@@ -9,8 +9,12 @@ from .log_factory import LogFactory
 from .Normalizer import UnitGaussianNormalizer
 from .models.nnet_model import MyNNet
 from .utils import *
+from .bayes_optimization import Bayes_Optimization
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LassoCV
+from bayes_opt import BayesianOptimization
+
+import matplotlib.pyplot as plt
 
 
 class CoreComponent:
@@ -38,6 +42,7 @@ class CoreComponent:
         self.data_factory = DataFactory(self)
         self.full_normalizer = UnitGaussianNormalizer(self)
         self.y_normalizer = UnitGaussianNormalizer(self)
+        self.bayes_optimization = Bayes_Optimization(self)
 
         self.full_X = None
         self.full_Y = None
@@ -94,6 +99,7 @@ class CoreComponent:
             self.device)
 
         self.initialized = True
+        
 
     def run(self):
         if self.model_name == "lasso":
@@ -121,7 +127,7 @@ class CoreComponent:
         elif self.model_name == "mlp":
             from sklearn.ensemble import ExtraTreesRegressor
             from sklearn.model_selection import RandomizedSearchCV, GridSearchCV, cross_val_score
-            from sklearn.neural_network import MLPRegressor
+            #from sklearn.neural_network import MLPRegressor
 
             row_idx = [i for i in range(self.full_X.shape[0])]
             random.shuffle(row_idx)
@@ -130,64 +136,409 @@ class CoreComponent:
             train_Y = self.full_Y[0:train_X.shape[0], ...].cpu().numpy()
             val_Y = self.full_Y[train_X.shape[0]:, ...].cpu().numpy()
 
-            n_estimators = [int(x) for x in np.linspace(start=1000, stop=2000, num=10)]
-            max_features = ['auto', 'sqrt']
-            max_depth = [int(x) for x in np.linspace(10, 110, num=5)]
-            max_depth.append(None)
-            min_samples_split = [2, 5, 10]
-            min_samples_leaf = [1, 2, 4]
-            bootstrap = [True, False]
-            random_grid = {'n_estimators': n_estimators,
-                           'max_features': max_features,
-                           'max_depth': max_depth,
-                           'min_samples_split': min_samples_split,
-                           'min_samples_leaf': min_samples_leaf,
-                           'bootstrap': bootstrap}
-            print(random_grid)
-
-            est = ExtraTreesRegressor()
-            rf_random = RandomizedSearchCV(estimator=est, param_distributions=random_grid, n_iter=100, cv=3, verbose=1,
-                                           n_jobs=-1)
-            rf_random.fit(train_X, train_Y)
-            rf_random.best_params_
-
-            parameter_grid = {'learning_rate': ['constant', 'invscaling', 'adaptive']}
-
-            start_time = time.time()
-
-            regf_grid = GridSearchCV(MLPRegressor(max_iter=10000, activation='tanh', solver='sgd'), parameter_grid,
-                                     n_jobs=-1)
-            regf_grid.fit(train_X, train_Y)
-
-            print('{} seconds'.format(round(time.time() - start_time)))
-            print()
-            print("Best parameters set found on development set:")
-            print(regf_grid.best_params_)
-            print()
-            print("Grid scores on development set:")
-            means = regf_grid.cv_results_['mean_test_score']
-            stds = regf_grid.cv_results_['std_test_score']
-            for mean, std, params in zip(means, stds, regf_grid.cv_results_['params']):
-                print("%0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
-
-            regf = ExtraTreesRegressor(n_estimators=1740, max_depth=53)
-            regf_cv = cross_val_score(regf, train_X, train_Y, cv=5, n_jobs=-1)
-
-            print("r2: %0.4f (+/- %0.2f)" % (regf_cv.mean(), regf_cv.std() * 2))
-
+            ###贝叶斯调参            
+            #黑盒函数 
+            def black_box_function(n_estimators, min_samples_split,  max_features, max_depth, min_samples_leaf):
+                val = cross_val_score(
+                    ExtraTreesRegressor(n_estimators = int(n_estimators),
+                        max_features = int(max_features),
+                        max_depth = int(max_depth),
+                        min_samples_split = int(min_samples_split),
+                        min_samples_leaf = int(min_samples_leaf),
+                        random_state = 2,
+                        bootstrap=True
+                    ),
+                    train_X, train_Y,scoring='r2', cv=5, n_jobs=-1
+                ).mean()
+                return val  #max_features = max_features, # float
+            
+            #定义域
+            pbounds= {'n_estimators': (500, 2000),
+                      'max_features': (1, self.full_X.shape[1]),
+                      'max_depth': (5, 150),
+                      'min_samples_split': (2, 30),
+                      'min_samples_leaf':(1, 20)}
+                      #'bootstrap': [True, False]
+            #实例化对象
+            optimizer = BayesianOptimization(f= black_box_function,
+                        pbounds= pbounds,
+                        verbose= 2,  # verbose = 1 prints only when a maximum is observed, verbose = 0 is silent
+                        random_state= 1,
+                        )
+            #确定迭代次数
+            optimizer.maximize(init_points= 12,  #执行随机搜索的步数
+                               n_iter= 100,   #执行贝叶斯优化的步数
+                               )
+            #输出最优结果
+            print(optimizer.max)
+            n_es=optimizer.max['params']['n_estimators']
+            max_dep=optimizer.max['params']['max_depth']
+            max_fea=optimizer.max['params']['max_features']
+            min_s_l=optimizer.max['params']['min_samples_leaf']
+            min_s_s=optimizer.max['params']['min_samples_split']
+            
             # extra trees regression
-            extra_tree = ExtraTreesRegressor(random_state=0, n_estimators=1740, max_depth=60, n_jobs=-1)
+            extra_tree = ExtraTreesRegressor(n_estimators=int(n_es),max_depth=int(max_dep), max_features=int(max_fea),
+                 min_samples_leaf=int(min_s_l), min_samples_split=int(min_s_s), n_jobs=-1,bootstrap=True)
             extra_tree.fit(train_X, train_Y)
             extra_pred = extra_tree.predict(val_X)
 
             self.log_factory.InfoLog("The score of extra_tree for validation={}".format(r2_score(val_Y, extra_pred)))
-
+            
+            #导出正确格式的csv文件
             ID = np.array(range(len(val_X)))
             import pandas as pd
             df = pd.DataFrame({'id': ID,
                                'y': extra_pred})
             df.to_csv(os.path.join(self.data_path, 'prediction.csv'), index=False)
             self.dump_validated_y(extra_tree.predict(self.validation_X.cpu().numpy()))
+            
+        elif self.model_name == "ensemble":
+            from sklearn.model_selection import KFold, GridSearchCV
+            
+            row_idx = [i for i in range(self.full_X.shape[0])]
+            random.shuffle(row_idx)
+            train_X = self.full_X[0:math.floor(len(row_idx) * self.train_percent), ...].cpu().numpy()
+            val_X = self.full_X[train_X.shape[0]:, ...].cpu().numpy()
+            train_Y = self.full_Y[0:train_X.shape[0], ...].cpu().numpy()
+            val_Y = self.full_Y[train_X.shape[0]:, ...].cpu().numpy()
+            
+            score_function = r2_score
+
+            # =============Add different models here!!!!=============
+            model_heads = []
+            models = []
+            from sklearn import tree    # 0
+            model_DecisionTreeRegressor = tree.DecisionTreeRegressor()
+            model_heads.append("Decision Tree Regression\t\t")
+            models.append(model_DecisionTreeRegressor)
+            
+            from sklearn import linear_model    # 1
+            model_LinearRegression = linear_model.LinearRegression()
+            model_heads.append("Linear Regression\t\t\t\t")
+            models.append(model_LinearRegression)
+            
+            from sklearn import svm     # 2
+            model_SVR = svm.SVR()
+            model_heads.append("Support Vector Machine Regression")
+            models.append(model_SVR)
+            
+            from sklearn import neighbors   # 3
+            model_KNeighborsRegressor = neighbors.KNeighborsRegressor()
+            model_heads.append("K-Nearest Neighbor Regression\t")
+            models.append(model_KNeighborsRegressor)
+            
+            from sklearn import ensemble    # 4
+            model_RandomForestRegressor = ensemble.RandomForestRegressor(n_estimators=20)
+            model_heads.append("Random Forest Regression\t\t")
+            models.append(model_RandomForestRegressor)
+            
+            from sklearn import ensemble    # 5
+            model_AdaBoostRegressor = ensemble.AdaBoostRegressor(n_estimators=150)
+            model_heads.append("AdaBoost Regression\t\t\t\t")
+            models.append(model_AdaBoostRegressor)
+            
+            from sklearn import ensemble    # 6
+            model_GradientBoostingRegressor = ensemble.GradientBoostingRegressor()
+            model_heads.append("Gradient Boosting Regression\t")
+            models.append(model_GradientBoostingRegressor)
+            
+            from sklearn.ensemble import BaggingRegressor   # 7
+            model_BaggingRegressor = BaggingRegressor()
+            model_heads.append("Bagging Regression\t\t\t\t")
+            models.append(model_BaggingRegressor)
+            
+            from sklearn.tree import ExtraTreeRegressor     # 8
+            model_ExtraTreeRegressor = ExtraTreeRegressor()
+            model_heads.append("ExtraTree Regression\t\t\t")
+            models.append(model_ExtraTreeRegressor)
+            
+            import xgboost as xgb       # 9
+            # params = {'learning_rate': 0.1, 'n_estimators': 400, 'max_depth': 8, 'min_child_weight': 2, 'seed': 0,
+            #           'subsample': 0.8, 'colsample_bytree': 0.8, 'gamma': 0.2, 'reg_alpha': 3, 'reg_lambda': 2}
+            model_XGBoostRegressor = xgb.XGBRegressor()
+            model_heads.append("XGBoost Regression\t\t\t\t")
+            models.append(model_XGBoostRegressor)
+            # =============Model Adding Ends=============
+            
+            # =============For Esemble and Stacking =============
+            from sklearn.linear_model import ElasticNet, Lasso,  BayesianRidge, LassoLarsIC
+            from sklearn.kernel_ridge import KernelRidge
+            from sklearn.pipeline import make_pipeline
+            from sklearn.preprocessing import RobustScaler
+            from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
+            from sklearn.model_selection import KFold
+            import xgboost as xgb
+            import lightgbm as lgb
+            from sklearn import linear_model
+            from sklearn.tree import DecisionTreeRegressor 
+
+            
+            #原组合：Enet+KRR+GBoost+lasso(meta)+xgb+lgb
+            #新组合：adaboost+RandomForest+GBoost+lasso(meta)+xgb+lgb
+            #lasso
+            print('Bayes_Optimization(lasso)')
+            alp = self.bayes_optimization.Bayes_opt_lasso(train_X = train_X, train_Y = train_Y)
+            lasso = make_pipeline(RobustScaler(), Lasso(alpha = alp, random_state=1))
+            #lasso = make_pipeline(RobustScaler(), Lasso(alpha =0.0005, random_state=1))
+            #adaboost
+            print('Bayes_Optimization(adaboost)')
+            n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s=self.bayes_optimization.Bayes_opt_Adaboost(train_X = train_X, train_Y = train_Y)            
+            Adaboost = ensemble.AdaBoostRegressor(
+                DecisionTreeRegressor( max_features = max_fea, max_depth = max_dep, 
+                min_samples_split = min_s_s,min_samples_leaf = min_s_l, random_state = 2),
+                n_estimators = n_es,learning_rate = l_ra)
+            #RandomForest
+            print('Bayes_Optimization(RandomForest)')
+            n_es, max_dep, max_fea, min_s_l, min_s_s=self.bayes_optimization.Bayes_opt_RandomForest(train_X = train_X, train_Y = train_Y) 
+            RandomForest = ensemble.RandomForestRegressor(n_estimators = n_es,
+              max_features = max_fea, max_depth = max_dep, 
+              min_samples_split = min_s_s, min_samples_leaf = min_s_l, 
+              random_state = 2)
+            #Gboost
+            print('Bayes_Optimization(Gboost)')
+            n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s = self.bayes_optimization.Bayes_opt_GBoost(train_X = train_X, train_Y = train_Y)            
+            Gboost = ensemble.GradientBoostingRegressor(max_features = max_fea, max_depth = max_dep, 
+                min_samples_split = min_s_s, min_samples_leaf = min_s_l, random_state = 2,
+                n_estimators = n_es, learning_rate = l_ra, loss='huber')
+            #xgb
+            model_xgb = xgb.XGBRegressor(colsample_bytree=0.4603, gamma=0.0468,
+                                         learning_rate=0.05, max_depth=3,
+                                         min_child_weight=1.7817, n_estimators=2200,
+                                         reg_alpha=0.4640, reg_lambda=0.8571,
+                                         subsample=0.5213, silent=1,
+                                         random_state =7, nthread = -1)
+            #lgb
+            model_lgb = lgb.LGBMRegressor(objective='regression',num_leaves=5,
+                                          learning_rate=0.05, n_estimators=720,
+                                          max_bin = 55, bagging_fraction = 0.8,
+                                          bagging_freq = 5, feature_fraction = 0.2319,
+                                          feature_fraction_seed=9, bagging_seed=9,
+                                          min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)
+                        
+            
+            def get_model_score(model, x_all, y_all, n_folds=5):
+                #交叉验证求r2_score
+                score_func = r2_score
+                kf = KFold(n_splits=n_folds, shuffle=True)
+                score_mean_test = 0
+                score_mean_train = 0
+                for train_idx, test_idx in kf.split(x_all):
+                    x_train = x_all[train_idx]
+                    y_train = y_all[train_idx]
+                    x_test = x_all[test_idx]
+                    y_test = y_all[test_idx]
+                    score_test, score_train = try_different_method(model, x_train, y_train, x_test, y_test, score_func)
+                    score_mean_test += score_test
+                    score_mean_train += score_train
+                score_mean_test /= n_folds
+                score_mean_train /= n_folds
+                return score_mean_test
+            
+            
+            def try_different_method(model, x_train, y_train, x_test, y_test, score_func):
+                #求模型分数
+                """
+                Inner function in train_evaluate_return_best_model for model training.
+                :param model: one specific model
+                :param x_train:
+                :param y_train:
+                :param x_test:
+                :param y_test:
+                :param score_func:
+                :return score:
+                """
+                model.fit(x_train, y_train)
+                result_test = model.predict(x_test)
+                result_train = model.predict(x_train)
+                return score_func(y_test, result_test), score_func(y_train, result_train)
+    
+    
+            class StackingAveragedModels(BaseEstimator, RegressorMixin, TransformerMixin):
+                #定义StackingAveragedModels
+                """
+                from https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
+                """
+                def __init__(self, base_models, meta_model, n_folds=5):
+                    self.base_models = base_models
+                    self.meta_model = meta_model
+                    self.n_folds = n_folds
+            
+                # We again fit the data on clones of the original models
+                def fit(self, X, y):
+                    self.base_models_ = [list() for x in self.base_models]
+                    self.meta_model_ = clone(self.meta_model)
+                    kfold = KFold(n_splits=self.n_folds, shuffle=True, random_state=156)
+            
+                    # Train cloned base models then create out-of-fold predictions
+                    # that are needed to train the cloned meta-model
+                    out_of_fold_predictions = np.zeros((X.shape[0], len(self.base_models)))
+                    for i, model in enumerate(self.base_models):
+                        for train_index, holdout_index in kfold.split(X, y):
+                            instance = clone(model)
+                            self.base_models_[i].append(instance)
+                            instance.fit(X[train_index], y[train_index])
+                            y_pred = instance.predict(X[holdout_index])
+                            out_of_fold_predictions[holdout_index, i] = y_pred.ravel()
+            
+                    # Now train the cloned  meta-model using the out-of-fold predictions as new feature
+                    self.meta_model_.fit(out_of_fold_predictions, y)
+                    return self
+            
+                # Do the predictions of all base models on the test data and use the averaged predictions as
+                # meta-features for the final prediction which is done by the meta-model
+                def predict(self, X):
+                    meta_features = np.column_stack([
+                        np.column_stack([model.predict(X) for model in base_models]).mean(axis=1)
+                        for base_models in self.base_models_])
+                    return self.meta_model_.predict(meta_features)
+                
+            # =============For Esemble and Stacking(end)=============
+            
+            
+             
+            def train_evaluate_return_best_model(x_all, y_all, score_func=r2_score, fold_num=5, return_ave=False):
+                """
+                Train predefined models on data using 5-fold validation
+                :param x_all: ndarray containing all features
+                :param y_all: ndarray containing all labels
+                :param score_func: score function
+                :param fold_num: fold number to use K-fold CV
+                :param return_ave: return average performance on all methods?
+                :return best_model: best model trained on all data
+                """
+                print()
+                print("Training model with K-fords...")
+                kf = KFold(n_splits=fold_num, shuffle=True)
+                best_score = 0
+                best_idx = 0
+                ave_score = 0
+                for (model_idx, model) in enumerate(models):
+                    score_mean_test = 0
+                    score_mean_train = 0
+                    for train_idx, test_idx in kf.split(x_all):
+                        x_train = x_all[train_idx]
+                        y_train = y_all[train_idx]
+                        x_test = x_all[test_idx]
+                        y_test = y_all[test_idx]
+                        score_test, score_train = try_different_method(model, x_train, y_train, x_test, y_test, score_func)
+                        score_mean_test+=score_test
+                        score_mean_train+=score_train
+                    score_mean_test /= fold_num
+                    score_mean_train /= fold_num
+                    ave_score += score_mean_test
+                    if not return_ave:
+                        print("{} \t score train: {}, score test: {}".format(model_heads[model_idx], score_mean_train, score_mean_test))
+                    if best_score < score_mean_test:
+                        best_score = score_mean_test
+                        best_idx = model_idx
+                print("Training done")
+                print("Best model: {}\t Score: {}".format(model_heads[best_idx], best_score))
+                if return_ave:
+                    print("Average score on {} models = {}".format(len(models), ave_score/len(models)))
+                best_model = models[best_idx]
+                best_model.fit(x_all, y_all)
+                return best_idx, best_model
+            
+            def tune_model_params(x_all, y_all):
+                """
+                Tune models on data using 5-fold validation
+                :param x_all: ndarray containing all features
+                :param y_all: ndarray containing all labels
+                :param score_func: score function
+                :param fold_num: fold number to use K-fold CV
+                :return best_model: best model trained on all data
+                """
+                print()
+                print("Tuning model...")
+                cv_params = {'reg_alpha': [0.05, 0.1, 1, 2, 3], 'reg_lambda': [0.05, 0.1, 1, 2, 3]}
+                other_params = {'learning_rate': 0.1, 'n_estimators': 400, 'max_depth': 8, 'min_child_weight': 2, 'seed': 0,
+                                'subsample': 0.8, 'colsample_bytree': 0.8, 'gamma': 0.2, 'reg_alpha': 3, 'reg_lambda': 2}
+                model = xgb.XGBRegressor(**other_params)
+                optimized_GBM = GridSearchCV(estimator=model, param_grid=cv_params, scoring='r2', cv=5, verbose=1, n_jobs=1)
+                optimized_GBM.fit(x_all, y_all)
+                evalute_result = optimized_GBM.grid_scores_
+                print('Result:{0}'.format(evalute_result))
+                print('Best params：{0}'.format(optimized_GBM.best_params_))
+                print('Best score:{0}'.format(optimized_GBM.best_score_))
+                
+            def get_model(x_all, y_all, model_idx):
+                """
+                Given model index return the corresponding model trained on all data
+                :param x_all:
+                :param y_all:
+                :param model_idx:
+                :return model:
+                """
+                print()
+                print("Training with all data using {}".format(model_heads[model_idx]))
+                model = models[model_idx].fit(x_all, y_all)
+                return model
+            
+            
+            print('Find best models:')
+            find_best_model = False     # display several preselected models' results (5-folds)
+            if find_best_model:
+                # show some results
+                _, _ = train_evaluate_return_best_model(x_all=train_X, y_all=train_Y,
+                                                        score_func=score_function, fold_num=5)
+            
+            # =================================================
+            # Ensemble + stacking
+            # =================================================
+            print()
+            print("Ensemble start...")
+            score = get_model_score(lasso, train_X, train_Y)
+            print("\nLasso score: {:.4f}\n".format(score))
+            score = get_model_score(Adaboost, train_X, train_Y)
+            print("Adaboost score: {:.4f}\n".format(score))
+            score = get_model_score(RandomForest, train_X, train_Y)
+            print("Randomforest score: {:.4f}\n".format(score))
+            score = get_model_score(Gboost, train_X, train_Y)
+            print("Gradient Boosting score: {:.4f}\n".format(score))
+            score = get_model_score(model_xgb, train_X, train_Y)
+            print("Xgboost score: {:.4f}\n".format(score))
+            score = get_model_score(model_lgb, train_X, train_Y)
+            print("LGBM score: {:.4f}\n".format(score))
+                
+            
+            #stacked_averaged_models = StackingAveragedModels(base_models=(ENet, GBoost, KRR),
+                                                             #meta_model=lasso)
+            stacked_averaged_models = StackingAveragedModels(base_models=(Adaboost, RandomForest, Gboost),
+                                                             meta_model=lasso)                                                 
+            score = get_model_score(stacked_averaged_models, train_X, train_Y)
+            print("Stacking Averaged models score: {:.4f}".format(score))
+            stacked_averaged_models.fit(train_X, train_Y)
+            stacked_train_pred = stacked_averaged_models.predict(train_X)
+            stacked_pred = stacked_averaged_models.predict(val_X)
+            print('r2 score of stack models on train data:', r2_score(train_Y, stacked_train_pred))
+            model_xgb.fit(train_X, train_Y)
+            xgb_train_pred = model_xgb.predict(train_X)
+            xgb_pred = model_xgb.predict(val_X)
+            print('r2 score of xgb on train data:', r2_score(train_Y, xgb_train_pred))
+            model_lgb.fit(train_X, train_Y)
+            lgb_train_pred = model_lgb.predict(train_X)
+            lgb_pred = model_lgb.predict(val_X)
+            print('r2 score of lgb on train data:', r2_score(train_Y, lgb_train_pred))
+            print('r2 score on train data:')
+            print(r2_score(train_Y, stacked_train_pred * 0.70 +
+                           xgb_train_pred * 0.15 + lgb_train_pred * 0.15))
+            model_ensemble = stacked_pred * 0.70 + xgb_pred * 0.15 + lgb_pred * 0.15
+            
+            self.log_factory.InfoLog("The score of ensemble for validation={}".format(r2_score(val_Y, model_ensemble)))
+            #导出正确格式的csv文件
+            ID = np.array(range(len(val_X)))
+            import pandas as pd
+            df = pd.DataFrame({'id': ID,
+                               'y': model_ensemble})
+            df.to_csv(os.path.join(self.data_path, 'prediction.csv'), index=False)
+            self.dump_validated_y(
+                stacked_averaged_models.predict(self.validation_X.cpu().numpy()) * 0.70 
+                + model_xgb.predict(self.validation_X.cpu().numpy()) * 0.15 
+                + model_lgb.predict(self.validation_X.cpu().numpy()) * 0.15)
+            #==============ensemble模型结束======================
+            
+            
         elif self.model_name == "nnet":
             self.train_model.initialization()
             computed_losses = []
@@ -266,3 +617,7 @@ class CoreComponent:
             for i, pred_y in enumerate(predicted_y_validate):
                 f.write("{},{}\n".format(i, pred_y))
             f.close()
+            
+
+    
+

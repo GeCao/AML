@@ -1,19 +1,27 @@
 from math import nan
-import os
+import os, time, math
+import random
+import torch
+
 import numpy as np
 import pandas as pd
 from scipy import stats
 from .data_utils.gain_imputer import GAINImputer
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import SimpleImputer, KNNImputer, MissingIndicator, IterativeImputer
-from sklearn.ensemble import IsolationForest, ExtraTreesClassifier, ExtraTreesRegressor
+from sklearn.ensemble import IsolationForest, ExtraTreesClassifier, ExtraTreesRegressor, RandomForestRegressor
 from sklearn.neighbors import KNeighborsRegressor, LocalOutlierFactor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.svm import LinearSVC
+from sklearn import feature_selection
 from sklearn.feature_selection import SelectFromModel, SelectKBest, f_regression, RFECV
 from sklearn.model_selection import KFold
-from sklearn.linear_model import LassoCV
+from sklearn.linear_model import Lasso, LassoCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import r2_score
+from sklearn.model_selection import cross_val_score
+
 
 
 class DataFactory:
@@ -32,7 +40,18 @@ class DataFactory:
 
     def initialization(self):
         self.initialized = True
-
+        
+    def winsorize(self, X):
+        df=pd.DataFrame(X.T)
+        #将因子值进行极端值缩尾处理，拉回至3.5倍MAD水平，并且不影响排序，不减少覆盖度
+        md = df.median(axis=1)
+        mad = (1.483 * (df.sub(md, axis=0)).abs().median(axis=1)).replace(0,np.nan)
+        up = df.apply(lambda k: k > md + mad * 3)
+        down = df.apply(lambda k: k < md - mad * 3)
+        df[up] = df[up].rank(axis=1, pct=True).multiply(mad * 0.5, axis=0).add(md + mad * 3, axis=0)
+        df[down] = df[down].rank(axis=1, pct=True).multiply(mad * 0.5, axis=0).add(md - mad * (0.5 + 3), axis=0)
+        return df.T
+    
     def outlier_detect_data(self, X, y=None, method='zscore'):
         """
         There are only outliers in X_train & y_train dataset!
@@ -70,6 +89,7 @@ class DataFactory:
             X = np.concatenate((if_X_y[:, :-1], X[rows_X:]), axis=0)
             y = if_X_y[:, -1]
         elif method == 'isolationforest':
+            print('2')
             rows_X = y.shape[0]
             X_y = np.concatenate((X[:rows_X, ...], y.reshape((rows_X, 1))), axis=1)
             if_sk = IsolationForest(n_estimators=100,
@@ -96,6 +116,9 @@ class DataFactory:
             X_y_no = X_y[~((X_y < (Q1 - 100 * IQR)) | (X_y > (Q3 + 100 * IQR))).any(axis=1)]
             X = np.concatenate((X_y_no[:, :-1], X[rows_X:, :]), axis=0)
             y = X_y_no[:, -1]
+        elif method == 'winsorize':
+            X = self.winsorize(X).to_numpy()
+            y = self.winsorize(y).to_numpy().astype(int)
         else:
             X, y = X, y
         return X, y
@@ -135,7 +158,7 @@ class DataFactory:
             model = SelectFromModel(lsvc, prefit=True, threshold=-np.inf, max_features=self.max_features)
             X = model.transform(X)
             return X, y
-        elif method == 'lasso':
+        elif method == 'lassoCV':
             lasso = LassoCV(tol=9.5, max_iter=10000).fit(train_X, y.ravel())
             importance = np.abs(lasso.coef_)
             threshold = min(i for i in importance if i >0)-0.0001
@@ -143,8 +166,57 @@ class DataFactory:
             model = SelectFromModel(lasso, threshold=threshold).fit(train_X,y.ravel())
             X = model.transform(X)
             return X, y
+        elif method == 'lasso':
+            lasso = Lasso(tol=9.5, max_iter=10000, alpha=0.02).fit(train_X, y.ravel())
+            model = SelectFromModel(lasso, prefit=True,threshold=-np.inf, max_features=self.max_features)
+            print('lasso_score:', lasso.score(train_X, y))
+            X = model.transform(X)
+            return X, y
+        elif method == 'SelectPercentile':            
+            # 通过交叉验证的方法，按照固定间隔的百分比筛选特征，并作图展示性能随特征筛选比例的变化
+            percentiles = range(1, 100, 2)
+            results = []
+            
+            # extra trees regression
+            extra_tree = ExtraTreesRegressor(n_estimators=1189,max_depth=62, max_features='auto',
+                 min_samples_leaf=1, min_samples_split=2, n_jobs=-1,bootstrap=True)
+            
+            for i in percentiles:
+                train_X = MinMaxScaler().fit_transform(train_X)
+                fs = feature_selection.SelectPercentile(feature_selection.chi2, percentile = i) # chi2卡方检验
+                X_train_fs = fs.fit_transform(train_X, y)
+                val = cross_val_score(extra_tree, X_train_fs, y,scoring='r2', 
+                                      cv=5, n_jobs=-1).mean()
+                results = np.append(results, val)
+            
+            print('res_max', results.max())
+            opt = np.where(results == results.max())[0]
+            
+            opt_percentiles=percentiles[int(opt)] 
+            print('opt_percent', percentiles[int(opt)] )
+            
+            #作图
+            import pylab as pl
+            pl.plot(percentiles, results)
+            pl.xlabel('percentiles of features')
+            pl.ylabel('accuracy')
+            pl.show()
+            
+            fs = feature_selection.SelectPercentile(feature_selection.chi2, percentile=opt_percentiles)
+            X_train_fs = fs.fit_transform(train_X, y)
+            X_fs = fs.transform(X)
+            return X_fs, y
         else:
             return X, y
+        
+    def filter_low_var_feature(self, x, threshold=1e-10):
+        x = pd.DataFrame(x)
+        x += 1e-7
+        x_var = np.var(x / np.mean(x, axis=0), axis=0)
+        x_idx = x_var > threshold
+        x -= 1e-7
+        return x_idx
+    
 
     def impute_data(self, X, y, method='else'):
         """
@@ -156,6 +228,7 @@ class DataFactory:
                        2. else: use the internal implementation of sklearn, choose 'mean' or 'median' strategy for predict.
         :return:
         """
+    
         if method == 'knn':
             knn_imputer = KNNImputer(n_neighbors=5)
             X = knn_imputer.fit_transform(X)
@@ -167,6 +240,12 @@ class DataFactory:
             y = mice_imputer.fit_transform(y)
             return X, y
         elif method == 'mean' or method == 'median':
+            # normalization
+            std = StandardScaler()
+            idx = self.filter_low_var_feature(X, 1e-10)
+            X = X[:, idx]
+            X = std.fit_transform(X)
+            
             mean_imputer = SimpleImputer(missing_values=np.nan, strategy=method)
             X = mean_imputer.fit_transform(X)
             y = mean_imputer.fit_transform(y)
@@ -176,6 +255,7 @@ class DataFactory:
             return self.gain_imputer.train(), KNNImputer(n_neighbors=5).fit_transform(y.reshape(y.shape[0], 1))
         else:
             return X, y
+    
 
     def read_dataset(self, file_path):
         """
