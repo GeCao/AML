@@ -192,6 +192,67 @@ class CoreComponent:
                                'y': extra_pred})
             df.to_csv(os.path.join(self.data_path, 'prediction.csv'), index=False)
             self.dump_validated_y(extra_tree.predict(self.validation_X.cpu().numpy()))
+        
+        elif self.model_name == "adaboost":
+            from sklearn import ensemble 
+            from sklearn.tree import DecisionTreeRegressor 
+            row_idx = [i for i in range(self.full_X.shape[0])]
+            random.shuffle(row_idx)
+            train_X = self.full_X[0:math.floor(len(row_idx) * self.train_percent), ...].cpu().numpy()
+            val_X = self.full_X[train_X.shape[0]:, ...].cpu().numpy()
+            train_Y = self.full_Y[0:train_X.shape[0], ...].cpu().numpy()
+            val_Y = self.full_Y[train_X.shape[0]:, ...].cpu().numpy()
+            
+            print('Bayes_Optimization(adaboost)')
+            n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s=self.bayes_optimization.Bayes_opt_Adaboost(train_X = train_X, train_Y = train_Y)            
+            Adaboost = ensemble.AdaBoostRegressor(
+                DecisionTreeRegressor( max_features = max_fea, max_depth = max_dep, 
+                min_samples_split = min_s_s,min_samples_leaf = min_s_l, random_state = 2),
+                n_estimators = n_es,learning_rate = l_ra)
+                
+            Adaboost.fit(train_X, train_Y)
+            ada_pred = Adaboost.predict(val_X)
+
+            self.log_factory.InfoLog("The score of Adaboost for validation={}".format(r2_score(val_Y, ada_pred)))
+            
+            #导出正确格式的csv文件
+            ID = np.array(range(len(val_X)))
+            import pandas as pd
+            df = pd.DataFrame({'id': ID,
+                               'y': ada_pred})
+            df.to_csv(os.path.join(self.data_path, 'prediction.csv'), index=False)
+            self.dump_validated_y(Adaboost.predict(self.validation_X.cpu().numpy()))
+            
+        elif self.model_name == "Gboost":
+            from sklearn import ensemble    
+            model_GradientBoostingRegressor = ensemble.GradientBoostingRegressor()
+            
+            row_idx = [i for i in range(self.full_X.shape[0])]
+            random.shuffle(row_idx)
+            train_X = self.full_X[0:math.floor(len(row_idx) * self.train_percent), ...].cpu().numpy()
+            val_X = self.full_X[train_X.shape[0]:, ...].cpu().numpy()
+            train_Y = self.full_Y[0:train_X.shape[0], ...].cpu().numpy()
+            val_Y = self.full_Y[train_X.shape[0]:, ...].cpu().numpy()
+            
+            #Gboost
+            print('Bayes_Optimization(Gboost)')
+            n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s = self.bayes_optimization.Bayes_opt_GBoost(train_X = train_X, train_Y = train_Y)            
+            Gboost = ensemble.GradientBoostingRegressor(max_features = max_fea, max_depth = max_dep, 
+                min_samples_split = min_s_s, min_samples_leaf = min_s_l, random_state = 2,
+                n_estimators = n_es, learning_rate = l_ra, loss='huber')
+
+            Gboost.fit(train_X, train_Y)
+            gbt_pred = Gboost.predict(val_X)
+            
+            self.log_factory.InfoLog("The score of Adaboost for validation={}".format(r2_score(val_Y, gbt_pred)))
+            
+            #导出正确格式的csv文件
+            ID = np.array(range(len(val_X)))
+            import pandas as pd
+            df = pd.DataFrame({'id': ID,
+                               'y': gbt_pred})
+            df.to_csv(os.path.join(self.data_path, 'prediction.csv'), index=False)
+            self.dump_validated_y(Gboost.predict(self.validation_X.cpu().numpy()))
             
         elif self.model_name == "ensemble":
             from sklearn.model_selection import KFold, GridSearchCV
@@ -272,15 +333,24 @@ class CoreComponent:
             import lightgbm as lgb
             from sklearn import linear_model
             from sklearn.tree import DecisionTreeRegressor 
+            from sklearn.ensemble import ExtraTreesRegressor
+
 
             
             #原组合：Enet+KRR+GBoost+lasso(meta)+xgb+lgb
             #新组合：adaboost+RandomForest+GBoost+lasso(meta)+xgb+lgb
+            '''
             #lasso
             print('Bayes_Optimization(lasso)')
             alp = self.bayes_optimization.Bayes_opt_lasso(train_X = train_X, train_Y = train_Y)
             lasso = make_pipeline(RobustScaler(), Lasso(alpha = alp, random_state=1))
             #lasso = make_pipeline(RobustScaler(), Lasso(alpha =0.0005, random_state=1))
+            '''
+            #extra_tree
+            print('Bayes_Optimization(extra_tree)')
+            n_es, max_dep, max_fea, min_s_l, min_s_s=self.bayes_optimization.Bayes_opt_extratree(train_X = train_X, train_Y = train_Y) 
+            extra_tree = ExtraTreesRegressor(n_estimators=int(n_es),max_depth=int(max_dep), max_features=int(max_fea),
+             min_samples_leaf=int(min_s_l), min_samples_split=int(min_s_s), n_jobs=-1,bootstrap=True)
             #adaboost
             print('Bayes_Optimization(adaboost)')
             n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s=self.bayes_optimization.Bayes_opt_Adaboost(train_X = train_X, train_Y = train_Y)            
@@ -476,20 +546,25 @@ class CoreComponent:
                 return model
             
             
+            '''
             print('Find best models:')
             find_best_model = False     # display several preselected models' results (5-folds)
             if find_best_model:
                 # show some results
                 _, _ = train_evaluate_return_best_model(x_all=train_X, y_all=train_Y,
                                                         score_func=score_function, fold_num=5)
-            
+            '''
             # =================================================
             # Ensemble + stacking
             # =================================================
             print()
             print("Ensemble start...")
+            '''
             score = get_model_score(lasso, train_X, train_Y)
             print("\nLasso score: {:.4f}\n".format(score))
+            '''
+            score = get_model_score(extra_tree, train_X, train_Y)
+            print("\nextra_tree score: {:.4f}\n".format(score))
             score = get_model_score(Adaboost, train_X, train_Y)
             print("Adaboost score: {:.4f}\n".format(score))
             score = get_model_score(RandomForest, train_X, train_Y)
@@ -505,7 +580,7 @@ class CoreComponent:
             #stacked_averaged_models = StackingAveragedModels(base_models=(ENet, GBoost, KRR),
                                                              #meta_model=lasso)
             stacked_averaged_models = StackingAveragedModels(base_models=(Adaboost, RandomForest, Gboost),
-                                                             meta_model=lasso)                                                 
+                                                             meta_model=extra_tree)                                                 
             score = get_model_score(stacked_averaged_models, train_X, train_Y)
             print("Stacking Averaged models score: {:.4f}".format(score))
             stacked_averaged_models.fit(train_X, train_Y)

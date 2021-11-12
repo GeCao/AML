@@ -21,6 +21,8 @@ from sklearn import ensemble
 from sklearn.tree import DecisionTreeRegressor 
 import xgboost as xgb
 import lightgbm as lgb
+from sklearn.ensemble import ExtraTreesRegressor
+
 
 
 
@@ -175,8 +177,8 @@ class Bayes_Optimization:
                     random_state= 1,
                     )
         #确定迭代次数
-        optimizer.maximize(init_points= 5,  #执行随机搜索的步数 
-                           n_iter= 30,   #执行贝叶斯优化的步数  
+        optimizer.maximize(init_points= 5,  #执行随机搜索的步数 5
+                           n_iter= 60,   #执行贝叶斯优化的步数  30
                            )
         #输出最优结果
         print(optimizer.max)
@@ -187,6 +189,49 @@ class Bayes_Optimization:
         min_s_l = int(optimizer.max['params']['min_samples_leaf'])
         min_s_s = int(optimizer.max['params']['min_samples_split'])
         return n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s
+    
+    #贝叶斯优化调节extratree参数 
+    def Bayes_opt_extratree(self, train_X, train_Y):
+        #黑盒函数 
+        def black_box_function(n_estimators, min_samples_split,  max_features, max_depth, min_samples_leaf):
+            val = cross_val_score(
+                ExtraTreesRegressor(n_estimators = int(n_estimators),
+                    max_features = int(max_features),
+                    max_depth = int(max_depth),
+                    min_samples_split = int(min_samples_split),
+                    min_samples_leaf = int(min_samples_leaf),
+                    random_state = 2,
+                    bootstrap=True
+                ),
+                train_X, train_Y,scoring='r2', cv=5, n_jobs=-1
+            ).mean()
+            return val  #max_features = max_features, # float
+        
+        #定义域
+        pbounds= {'n_estimators': (500, 2000),
+                  'max_features': (1, 3),
+                  'max_depth': (5, 150),
+                  'min_samples_split': (2, 30),
+                  'min_samples_leaf':(1, 20)}
+        #实例化对象
+        optimizer = BayesianOptimization(f= black_box_function,
+                    pbounds= pbounds,
+                    verbose= 2,  # verbose = 1 prints only when a maximum is observed, verbose = 0 is silent
+                    random_state= 1,
+                    )
+        #确定迭代次数
+        optimizer.maximize(init_points= 5,  #执行随机搜索的步数 
+                           n_iter= 55,   #执行贝叶斯优化的步数 
+                           )
+        #输出最优结果
+        print(optimizer.max)
+        n_es = int(optimizer.max['params']['n_estimators'])
+        max_dep = int(optimizer.max['params']['max_depth'])
+        max_fea = int(optimizer.max['params']['max_features'])
+        min_s_l = int(optimizer.max['params']['min_samples_leaf'])
+        min_s_s = int(optimizer.max['params']['min_samples_split'])
+        return n_es, max_dep, max_fea, min_s_l, min_s_s
+
     
     
     

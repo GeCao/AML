@@ -250,6 +250,38 @@ class DataFactory:
             X = mean_imputer.fit_transform(X)
             y = mean_imputer.fit_transform(y)
             return X, y
+        elif method == 'random_forest':            
+            data_copy = pd.DataFrame(X).copy()
+            
+            sindex = np.argsort(data_copy.isna().sum().values.tolist()) #将有缺失值的列按缺失值的多少由小到大
+            print(sindex)
+            # 进入for循环进行空值填补
+            for i in sindex: # 按空值数量,从小到大进行排序来遍历
+                print(i)
+                if data_copy.iloc[:,i].isna().sum() == 0:             # 将没有空值的行过滤掉
+                    continue                                          # 直接跳过当前的for循环
+                df = data_copy                                        # 复制df数据
+                fillc = df.iloc[:,i]                                  # 将第i列的取出，之后作为y变量
+                df = df.iloc[:,df.columns != df.columns[i]]           # 除了有这列以外的数据，之后作为X
+                df_0 = SimpleImputer(missing_values=np.nan,           # 将df的数据全部用0填充
+                                     strategy="constant",
+                                     fill_value=0).fit_transform(df)
+                Ytrain = fillc[fillc.notnull()]                       # 在fillc列中,不为NAN的作为Y_train
+                Ytest = fillc[fillc.isnull()]                         # 在fillc列中,为NAN的作为Y_test 
+                Xtrain = df_0[Ytrain.index,:]                         # 在df_0中(已经填充了0),中那些fillc列不为NAN的行作为Xtrain
+                Xtest = df_0[Ytest.index,:]                           # 在df_0中(已经填充了0),中那些fillc等于NAN的行作为X_test
+                
+                rfc = RandomForestRegressor()
+                rfc.fit(Xtrain,Ytrain)
+                Ypredict = rfc.predict(Xtest)                         #Ytest为了定Xtest,以最后预测出Ypredict
+                
+                data_copy.loc[data_copy.iloc[:,i].isnull(),data_copy.columns[i]] = Ypredict    
+                # 将data_copy中data_copy在第i列为空值的行,第i列,改成Ypredict    
+            X = data_copy.to_numpy()
+            #填充y值
+            mean_imputer = SimpleImputer(missing_values=np.nan, strategy='median')
+            y = mean_imputer.fit_transform(y)
+            return X, y
         elif method == 'gain':
             self.gain_imputer.initialization(X)
             return self.gain_imputer.train(), KNNImputer(n_neighbors=5).fit_transform(y.reshape(y.shape[0], 1))
