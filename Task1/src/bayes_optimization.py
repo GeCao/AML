@@ -59,7 +59,7 @@ class Bayes_Optimization:
         return alpha
   
     
-    #贝叶斯优化调节Adaboost参数 45mins
+    #贝叶斯优化调节Adaboost参数 
     def Bayes_opt_Adaboost(self, train_X, train_Y):
         #黑盒函数 
         def black_box_function(n_estimators, learning_rate, min_samples_split,  max_features, max_depth, min_samples_leaf):
@@ -102,7 +102,7 @@ class Bayes_Optimization:
         return n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s
 
     
-    #贝叶斯优化调节RandomForest参数 17mins
+    #贝叶斯优化调节RandomForest参数
     def Bayes_opt_RandomForest(self, train_X, train_Y):
         #黑盒函数 
         def black_box_function(n_estimators, min_samples_split,  max_features, max_depth, min_samples_leaf):
@@ -144,7 +144,7 @@ class Bayes_Optimization:
         return n_es, max_dep, max_fea, min_s_l, min_s_s
 
         
-    #贝叶斯优化调节GBoost参数 30个 1h
+    #贝叶斯优化调节GBoost参数 
     def Bayes_opt_GBoost(self, train_X, train_Y):
         #黑盒函数 
         def black_box_function(n_estimators, learning_rate, min_samples_split,  max_features, max_depth, min_samples_leaf):
@@ -189,6 +189,8 @@ class Bayes_Optimization:
         return n_es, l_ra, max_dep, max_fea, min_s_l, min_s_s
     
     
+    
+'''    
     #贝叶斯优化调节xgb参数
     def Bayes_opt_xgb(self, train_X, train_Y):
         #黑盒函数 
@@ -241,4 +243,4 @@ class Bayes_Optimization:
         reg_a = optimizer.max['params']['reg_alpha']
         reg_l = optimizer.max['params']['reg_lambda']
         return n_es, l_ra, max_dep, min_c_w, gam, subs, col_b, reg_a, reg_l
- 
+ '''
