@@ -12,13 +12,15 @@ class MyNNet(MyModel):
         super(MyNNet, self).__init__(core_management)
 
         self.hideen_dim_0 = None
-        self.hideen_dim_1 = 50
-        self.hideen_dim_2 = 25
+        self.hideen_dim_1 = 64
+        self.hideen_dim_2 = 16
 
         self.layer0 = None
         self.layer1 = None
         self.layer2 = None
         self.layer3 = None
+        self.layer4 = None
+        self.layer5 = None
 
         self.regularization = 1e-4  # 这个值越大，最终得到得分布值越接近于恒等于mean
 
@@ -44,9 +46,8 @@ class MyNNet(MyModel):
 
         self.initialized = True
 
-    def forward(self, input):
-        output0 = F.leaky_relu(self.layer0(input))
-        # output0_halv = F.dropout(output0, p=0.5)
+    def forward(self, input_):
+        output0 = F.leaky_relu(self.layer0(input_))
 
         output1 = F.leaky_relu(self.layer1(output0))
 

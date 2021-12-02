@@ -96,7 +96,6 @@ class CoreComponent:
         # full_validation_X, self.full_Y = self.data_factory.preprocess_dataset(full_validation_X, self.full_Y)
 
         # 4. feature selection
-        full_X_shape_0 = len(self.full_Y)
         # full_validation_X, self.full_Y = self.data_factory.feature_selection(full_validation_X, self.full_Y, method=self.pca)
 
         # 5. imputer
@@ -113,7 +112,7 @@ class CoreComponent:
         SDNN = []
         SDSD = []
         RMSSD = []
-        pNN20 = []
+        pNN200 = []
         pNN50 = []
         measures = {}
 
@@ -123,29 +122,36 @@ class CoreComponent:
             measures['ibi'] = np.mean(RR_interval)
             measures['sdnn'] = np.std(RR_interval)
             interval_diff = abs(np.diff(RR_interval))
-            nn20 = [x for x in interval_diff if (x > 20)]
+            nn200 = [x for x in interval_diff if (x > 200)]
             nn50 = [x for x in interval_diff if (x > 50)]
-            measures['pnn20'] = float(len(nn20)) / float(len(interval_diff)) if len(interval_diff) > 0 else np.nan
+            measures['pnn200'] = float(len(nn200)) / float(len(interval_diff)) if len(interval_diff) > 0 else np.nan
             measures['pnn50'] = float(len(nn50)) / float(len(interval_diff)) if len(interval_diff) > 0 else np.nan
             measures['rmssd'] = np.sqrt(np.mean(np.power(interval_diff, 2))) if len(interval_diff) > 0 else np.nan
             measures['sdsd'] = np.std(interval_diff) if len(interval_diff) > 0 else np.nan
 
         for i in range(full_validation_X.shape[0]):
-            out = ecg.ecg(signal=full_validation_X[i][10:], sampling_rate=300, show=False)
+            curr_signal = full_validation_X[i][10:]
+            for j in range(len(curr_signal)):
+                if np.isnan(curr_signal[j]):
+                    curr_signal = curr_signal[:j]
+                    break
+            if len(curr_signal) < 240:
+                print("when i = {}, len of signal = {}".format(i, len(curr_signal)))
+            out = ecg.ecg(signal=curr_signal, sampling_rate=300, show=False)
             try:
-                meanhr.append(np.mean(out[6]))
                 minhr.append(min(out[6]))
                 maxhr.append(max(out[6]))
                 stdhr.append(np.std(out[6]))
+                meanhr.append(np.mean(out[6]))
             except:
-                print("Ecg analysis got its problem for i={}", i)
+                print("Ecg analysis got its problem for i={}".format(i))
                 meanhr.append(np.nan)
                 minhr.append(np.nan)
                 maxhr.append(np.nan)
                 stdhr.append(np.nan)
             calc_RR(out)
             IBI.append(measures['ibi'])
-            pNN20.append(measures['pnn20'])
+            pNN200.append(measures['pnn200'])
             pNN50.append(measures['pnn50'])
             SDNN.append(measures['sdnn'])
             SDSD.append(measures['sdsd'])
@@ -156,7 +162,7 @@ class CoreComponent:
         full_validation_features['maxhr'] = pd.Series(maxhr)
         full_validation_features['stdhr'] = pd.Series(stdhr)
         full_validation_features['ibi'] = pd.Series(IBI)
-        # full_validation_features['pnn20'] = pd.Series(pNN20)
+        full_validation_features['pnn20'] = pd.Series(pNN200)
         full_validation_features['pnn50'] = pd.Series(pNN50)
         full_validation_features['sdnn'] = pd.Series(SDNN)
         full_validation_features['sdsd'] = pd.Series(SDSD)
@@ -425,6 +431,7 @@ class CoreComponent:
             path = os.path.join(self.data_path, name)
             df.to_csv(path, index=False)
         elif self.model_name == 'nnet':
+            torch.random.manual_seed(0)
             # 0. transfer numpy data to Tensor data
             self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
             self.full_X = torch.autograd.Variable(torch.from_numpy(np.array(self.full_X)).float()).to(self.device)

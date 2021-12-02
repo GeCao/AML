@@ -292,7 +292,7 @@ class DataFactory:
             return None
 
         data = pd.read_csv(file_path, dtype=np.float32)
-        data = data.dropna(axis=1, how='any')
+        # data = data.dropna(axis=1, how='any')
         column_name_list = data.columns.tolist()
         if 'id' in column_name_list:
             # data['id'] = data['id'].astype(int)
