@@ -5,7 +5,7 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='svm', choices=["svm"], help='type of model')
+    parser.add_argument('--model', type=str, default='ensemble', choices=["svm", "ensemble", "nnet"], help='type of model')
     parser.add_argument('--imputer', type=str, 
                         default='median',
                         choices=['knn', 'mice', 'mean', 'median', 'else', 'random_forest'], help='type of imputer')
@@ -13,8 +13,8 @@ if __name__ == "__main__":
                         default='else',
                         choices=['zscore', 'iqr', 'local', 'isolationforest', 'winsorize', 'else'], help='type of outlier')
     parser.add_argument('--pca', type=str,
-                        default='kbest', #kbest
-                        choices=['pca', 'kbest', 'tree', 'lsvc', 'lassoCV', 'lasso', 'SelectPercentile'
+                        default='tree',
+                        choices=['pca', 'rfecv', 'tree', 'lsvc', 'lassoCV', 'lasso', 'SelectPercentile',
                                  'else'], help='type of feature selection')
     parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'], help='type of device')
 
