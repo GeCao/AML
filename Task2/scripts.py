@@ -1,10 +1,19 @@
 import re
 import pandas as pd
 import numpy as np
+import torch
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
 import biosppy.signals.ecg as ecg
 from sklearn.model_selection import train_test_split
+
+input_train = torch.ones((20, 5), dtype=torch.float32)
+target = torch.empty(20, dtype=torch.long).random_(5)
+print(input_train.shape)
+print(target.shape)
+print(F.cross_entropy(input_train, target))
+exit(-1)
 
 
 def readts(file_name):

@@ -2,6 +2,7 @@ import os, time, math
 import random
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 import numpy as np
 import pandas as pd
 import biosppy.signals.ecg as ecg
@@ -37,6 +38,7 @@ class CoreComponent:
         self.outlier = outlier
         self.pca = pca
         self.device = device  # choose with your preference
+        self.generate_checkpoint = False
 
         self.model_name = 'svm' if model is None else model  # choose with your preference
         if self.model_name == 'svm':
@@ -49,12 +51,13 @@ class CoreComponent:
         self.log_factory = LogFactory(self, log_to_disk=False)
         self.data_factory = DataFactory(self)
         self.full_normalizer = UnitGaussianNormalizer(self)
+        self.data_loader = None
+        self.batch_size = 32
 
         self.full_X = None
         self.full_Y = None
         self.validation_X = None
 
-        self.k_fold = 10
         self.train_percent = 0.95
 
         self.initialized = False
@@ -67,13 +70,20 @@ class CoreComponent:
         self.data_factory.initialization()
 
         # 1. read data
-        self.full_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"), "X_train")
-        self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"), "y_train")
-        self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"), "X_test")
+        if not self.generate_checkpoint:
+            self.full_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train_checkpoint.csv"))
+            self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train_checkpoint.csv"))
+            self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test_checkpoint.csv"))
+            self.full_Y = self.full_Y.astype(np.int)
+            return
+        self.full_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_train.csv"))
+        self.full_Y = self.data_factory.read_dataset(os.path.join(self.data_path, "y_train.csv"))
+        self.validation_X = self.data_factory.read_dataset(os.path.join(self.data_path, "X_test.csv"))
         self.validation_X = self.validation_X[:, :self.full_X.shape[1]]
         self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
         self.log_factory.InfoLog("Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
-        self.log_factory.InfoLog("Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
+        self.log_factory.InfoLog(
+            "Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
 
         print("The mean of dataset of train_X: = {}".format(self.full_X.mean()))
 
@@ -154,7 +164,19 @@ class CoreComponent:
 
         full_validation_features = full_validation_features.to_numpy()
         full_validation_features, self.full_Y = self.data_factory.impute_dataset(full_validation_features, self.full_Y,
-                                                                          impute_method=self.imputer)
+                                                                                 impute_method=self.imputer)
+
+        if self.generate_checkpoint:
+            ID = np.array(range(len(self.full_Y)))
+            df = pd.DataFrame({'id': ID,
+                               'y': self.full_Y.reshape(-1)})
+            path = os.path.join(self.data_path, 'y_train_checkpoint.csv')
+            df.to_csv(path, index=False)
+            df = pd.DataFrame(full_validation_features)
+            path = os.path.join(self.data_path, 'X_train_checkpoint.csv')
+            df[0:self.full_Y.shape[0]].to_csv(path, index=False)
+            path = os.path.join(self.data_path, 'X_test_checkpoint.csv')
+            df[self.full_Y.shape[0]:].to_csv(path, index=False)
 
         self.log_factory.InfoLog("After feature selection, the shape of X = {}".format(full_validation_features.shape))
         # full_validation_X, self.full_Y = self.data_factory.post_impute(full_validation_X, self.full_Y, impute_method=self.imputer)
@@ -162,7 +184,8 @@ class CoreComponent:
         self.validation_X = full_validation_features[self.full_Y.shape[0]:, :]
         self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
         self.log_factory.InfoLog("Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
-        self.log_factory.InfoLog("Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
+        self.log_factory.InfoLog(
+            "Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
 
         self.full_Y = self.full_Y.astype(np.int)
         cls0, cls1, cls2, cls3 = np.bincount(self.full_Y.reshape(-1))
@@ -332,7 +355,7 @@ class CoreComponent:
                            'degree': [3, 4, 5, 6, 7],
                            'kernel': ['poly', 'rbf'],
                            'class_weight': ['balanced', 'None'],
-                           'C': [0.125,  0.6225, 0.875]}
+                           'C': [0.125, 0.6225, 0.875]}
             svmc = svm.SVC(random_state=seed,
                            tol=0.001,
                            decision_function_shape='ovo')
@@ -390,7 +413,8 @@ class CoreComponent:
             ensemble.fit(train_X, train_Y)
             self.log_factory.InfoLog("Finally, we got a score of {}".format(ensemble.score(test_X, test_Y)))
             self.log_factory.InfoLog(
-                    "Finally, we got our f1 score on test set = {}".format(f1_score(test_Y, ensemble.predict(test_X), average='micro')))
+                "Finally, we got our f1 score on test set = {}".format(
+                    f1_score(test_Y, ensemble.predict(test_X), average='micro')))
 
             pred_val_y = ensemble.predict(self.validation_X)
 
@@ -401,70 +425,70 @@ class CoreComponent:
             path = os.path.join(self.data_path, name)
             df.to_csv(path, index=False)
         elif self.model_name == 'nnet':
-            # 3. transfer numpy data to Tensor data
+            # 0. transfer numpy data to Tensor data
             self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
             self.full_X = torch.autograd.Variable(torch.from_numpy(np.array(self.full_X)).float()).to(self.device)
-            # self.full_Y = self.data_factory.process_dataset(self.full_Y) # Y data cannot be processed!
             self.log_factory.InfoLog("Read data completed from y_train.csv, with shape as {}".format(self.full_Y.shape))
             self.full_Y = torch.autograd.Variable(
-                torch.from_numpy(np.array(self.full_Y).reshape(self.full_Y.shape[0], 1)).float()).to(self.device)
+                torch.from_numpy(np.array(self.full_Y).reshape(self.full_Y.shape[0], 1))).to(self.device).to(torch.long)
 
             self.log_factory.InfoLog(
                 "Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
             self.validation_X = torch.autograd.Variable(torch.from_numpy(np.array(self.validation_X)).float()).to(
                 self.device)
 
-            self.train_model.initialization()
+            # 1. data set split
+            idx = [i for i in range(self.full_X.shape[0])]
+            sampled_idx = random.sample(idx, self.full_Y.shape[0])
+            indicator = np.array([False for i in range(self.full_X.shape[0])])
+            indicator[sampled_idx[0:int(self.train_percent * self.full_X.shape[0])]] = True
+            train_X = self.full_X[indicator == True, :]
+            train_Y = self.full_Y[indicator == True, :]
+            test_X = self.full_X[indicator == False, :]
+            test_Y = self.full_Y[indicator == False, :]
+            np_test_Y = test_Y.cpu().numpy()
+
+            # 2. data loader
+            train_data_set = TensorDataset(train_X, train_Y)
+            self.data_loader = DataLoader(train_data_set, batch_size=self.batch_size, shuffle=True)
+            self.train_model.initialization(train_X.shape[1])
             computed_losses = []
             train_losses = []
             for epoch in range(self.train_model.total_epoch):
-                stride = self.full_X.shape[0] // self.k_fold
-                train_X, train_Y, test_X, test_Y = None, None, None, None
-
                 test_loss = 0.0
                 train_loss = 0.0
-                test_mse = 0.0
-                train_mse = 0.0
                 test_f1_score = 0.0
-                self.train_model.train()
-                idx = [i for i in range(self.full_X.shape[0])]
-                sampled_idx = random.sample(idx, self.full_Y.shape[0])
-                for i in range(self.k_fold):
-                    indicator = np.array([False for i in range(self.full_X.shape[0])])
-                    if i != self.k_fold - 1:
-                        indicator[sampled_idx[i * stride: (i + 1) * stride]] = True
-                    else:
-                        indicator[sampled_idx[i * stride:]] = True
-                    # k-fold CV
-                    train_X = self.full_X[indicator == False, :]
-                    train_Y = self.full_Y[indicator == False, :]
-                    test_X = self.full_X[indicator == True, :]
-                    test_Y = self.full_Y[indicator == True, :]
-
+                for i, (input_train, target) in enumerate(self.data_loader):
                     self.train_model.optimizer.zero_grad()
-                    predicted_y = self.train_model(train_X)
-                    temp_loss = self.train_model.compute_loss(predicted_y, train_Y)
+                    predicted_y = self.train_model(input_train)
+                    temp_loss = self.train_model.compute_loss(predicted_y, target.squeeze())
                     temp_loss.backward()
                     self.train_model.optimizer.step()
 
-                    with torch.no_grad():
-                        train_loss += temp_loss.item() / self.k_fold
-                        predicted_y_test = self.train_model(test_X)
-                        test_loss += self.train_model.compute_loss(predicted_y_test, test_Y) / self.k_fold
-                        train_mse += F.mse_loss(predicted_y, train_Y) / self.k_fold
-                        test_mse += F.mse_loss(predicted_y_test, test_Y) / self.k_fold
-                        test_f1_score += f1_score(test_Y.cpu().numpy(), torch.floor(predicted_y_test).to(torch.int).cpu().numpy(), average='micro') / self.k_fold
+                    train_loss = temp_loss.item()
 
                 if epoch % 200 == 0:
+                    with torch.no_grad():
+                        predicted_y_test = self.train_model(test_X)
+                        test_loss = self.train_model.compute_loss(predicted_y_test, test_Y.squeeze())
+                        predicted_y_test = torch.argmax(predicted_y_test, dim=1)
+                        predicted_y_test = predicted_y_test.cpu().numpy()
+                        test_f1_score = f1_score(np_test_Y, predicted_y_test, average='micro')
+                        print("total = {}".format(len(np_test_Y)))
+                        print("predicted cls0 = {}, true cls0 = {}".format(len(predicted_y_test[predicted_y_test == 0]), len(np_test_Y[np_test_Y == 0])))
+                        print("predicted cls1 = {}, true cls1 = {}".format(len(predicted_y_test[predicted_y_test == 1]), len(np_test_Y[np_test_Y == 1])))
+                        print("predicted cls2 = {}, true cls2 = {}".format(len(predicted_y_test[predicted_y_test == 2]), len(np_test_Y[np_test_Y == 2])))
+                        print("predicted cls3 = {}, true cls3 = {}".format(len(predicted_y_test[predicted_y_test == 3]), len(np_test_Y[np_test_Y == 3])))
+
                     self.log_factory.InfoLog(
-                        "Epoch={}, while test loss={}, train loss={}, test MSE={}, train MSE={}, r2_score={}".format(
-                            epoch, test_loss, train_loss, test_mse, train_mse, test_f1_score))
+                        "Epoch={}, while test loss={}, train loss={}, f1_score={}".format(
+                            epoch, test_loss, train_loss, test_f1_score))
                     computed_losses.append(test_loss.detach().clone().cpu())
                     train_losses.append(train_loss)
                     with torch.no_grad():
-                        predicted_y_validate = torch.floor(self.train_model(self.validation_X)).squeeze(1).to(torch.int).cpu().numpy()
+                        predicted_y_validate = torch.argmax(self.train_model(self.validation_X),
+                                                            dim=1).cpu().numpy().reshape(-1)
                         self.dump_validated_y(predicted_y_validate)
-
 
     def kill(self):
         self.log_factory.kill()
@@ -482,7 +506,7 @@ class CoreComponent:
         plt.scatter([2 for i in range(len(predicted_y_validate))], predicted_y_validate, edgecolors='b')
         fig.savefig(os.path.join(self.data_path, "distribution.png"))
 
-        with open(os.path.join(self.data_path, "y_validate.csv"), 'w') as f:
+        with open(os.path.join(self.data_path, "y_validation.csv"), 'w') as f:
             f.write("id,y\n")
             for i, pred_y in enumerate(predicted_y_validate):
                 f.write("{},{}\n".format(i, pred_y))

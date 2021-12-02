@@ -5,7 +5,7 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='ensemble', choices=["svm", "ensemble", "nnet"], help='type of model')
+    parser.add_argument('--model', type=str, default='nnet', choices=["svm", "ensemble", "nnet"], help='type of model')
     parser.add_argument('--imputer', type=str, 
                         default='median',
                         choices=['knn', 'mice', 'mean', 'median', 'else', 'random_forest'], help='type of imputer')

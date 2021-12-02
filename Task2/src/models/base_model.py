@@ -17,7 +17,7 @@ class MyModel(torch.nn.Module):
 
         self.initialized = False
 
-    def initialization(self):
+    def initialization(self, input_dimension):
         pass
 
     def forward(self, input):

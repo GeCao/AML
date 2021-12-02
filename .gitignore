@@ -4,4 +4,7 @@ Task1/src/*/__pycache__/*
 Task1/src/*/__pycache__/*
 Task1/data/
 Task2/data/
+Task2/data/X_train.csv
+Task2/data/y_train.csv
+Task2/data/X_test.csv
 *.pyc

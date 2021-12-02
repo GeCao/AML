@@ -23,5 +23,5 @@ class MyModel(torch.nn.Module):
     def forward(self, input):
         pass
 
-    def compute_loss(self, predicted_y):
+    def compute_loss(self, predicted_y, train_Y):
         pass

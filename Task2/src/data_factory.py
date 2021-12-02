@@ -280,7 +280,7 @@ class DataFactory:
         else:
             return X, y
 
-    def read_dataset(self, file_path, file_type):
+    def read_dataset(self, file_path):
         """
 
         :param file_path:
