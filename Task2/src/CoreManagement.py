@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Dataset, TensorDataset
 import numpy as np
 import pandas as pd
 import biosppy.signals.ecg as ecg
+import neurokit2 as nk
 
 from .data_factory import DataFactory
 from .log_factory import LogFactory
@@ -30,15 +31,14 @@ import matplotlib.pyplot as plt
 
 
 class CoreComponent:
-    def __init__(self, model='lasso', imputer='knn', outlier='zscore', pca='pca', device='cuda'):
+    def __init__(self, model='lasso', imputer='knn', outlier='zscore', device='cuda', no_checkpoint=False):
         self.root_path = os.path.abspath(os.curdir)
         self.data_path = os.path.join(self.root_path, 'data')
         print("The root path of our project: ", self.root_path)
         self.imputer = imputer
         self.outlier = outlier
-        self.pca = pca
         self.device = device  # choose with your preference
-        self.generate_checkpoint = False
+        self.generate_checkpoint = no_checkpoint
 
         self.model_name = 'svm' if model is None else model  # choose with your preference
         if self.model_name == 'svm':
@@ -52,7 +52,7 @@ class CoreComponent:
         self.data_factory = DataFactory(self)
         self.full_normalizer = UnitGaussianNormalizer(self)
         self.data_loader = None
-        self.batch_size = 32
+        self.batch_size = 64
 
         self.full_X = None
         self.full_Y = None
@@ -85,24 +85,8 @@ class CoreComponent:
         self.log_factory.InfoLog(
             "Read data completed from X_test.csv, with shape as {}".format(self.validation_X.shape))
 
-        print("The mean of dataset of train_X: = {}".format(self.full_X.mean()))
-
         # 2. process X files together
-        full_X_shape_0 = self.full_X.shape[0]
-        validation_X_shape_0 = self.validation_X.shape[0]
         full_validation_X = np.concatenate((self.full_X, self.validation_X), axis=0)
-
-        # 3. preprocess: impute with median + normalize + k_best
-        # full_validation_X, self.full_Y = self.data_factory.preprocess_dataset(full_validation_X, self.full_Y)
-
-        # 4. feature selection
-        # full_validation_X, self.full_Y = self.data_factory.feature_selection(full_validation_X, self.full_Y, method=self.pca)
-
-        # 5. imputer
-        # full_validation_X, self.full_Y = self.data_factory.impute_dataset(full_validation_X, self.full_Y, impute_method=self.imputer)
-
-        # 6. outlier detection
-        # full_validation_X, self.full_Y = self.data_factory.outlier_detect_dataset(full_validation_X, self.full_Y, outlier_method=self.outlier)
 
         meanhr = []
         minhr = []
@@ -115,6 +99,8 @@ class CoreComponent:
         pNN200 = []
         pNN50 = []
         measures = {}
+        st_std = []
+        pq_std = []
 
         def calc_RR(out):
             peaklist = out[0][out[2]]
@@ -138,6 +124,44 @@ class CoreComponent:
             if len(curr_signal) < 240:
                 print("when i = {}, len of signal = {}".format(i, len(curr_signal)))
             out = ecg.ecg(signal=curr_signal, sampling_rate=300, show=False)
+            time_axis = out[0]
+            filtered = out[1]
+            if len(filtered) > 0:
+                _, rpeaks = nk.ecg_peaks(filtered, sampling_rate=300)
+                _, nk_out = nk.ecg_delineate(filtered, rpeaks, sampling_rate=300, method='peak')
+                if len(nk_out['ECG_T_Peaks']) > 0:
+                    pd_TS = pd.DataFrame()
+                    pd_TS['ECG_T_Peaks'] = pd.Series(nk_out['ECG_T_Peaks'])
+                    pd_TS['ECG_S_Peaks'] = pd.Series(nk_out['ECG_S_Peaks'])
+                    pd_TS = pd_TS.dropna(axis=0, how='any')
+
+                    pd_PQ = pd.DataFrame()
+                    pd_PQ['ECG_P_Peaks'] = pd.Series(nk_out['ECG_P_Peaks'])
+                    pd_PQ['ECG_Q_Peaks'] = pd.Series(nk_out['ECG_Q_Peaks'])
+                    pd_PQ = pd_PQ.dropna(axis=0, how='any')
+
+                    if len(pd_TS) > 0:
+                        idx_T = pd_TS['ECG_T_Peaks'].to_numpy().astype(np.int)
+                        idx_S = pd_TS['ECG_S_Peaks'].to_numpy().astype(np.int)
+                        TS_std = np.mean(np.array([np.std(filtered[idx_S[i] : idx_T[i]]) for i in range(len(idx_T))]))
+                        st_std.append(TS_std)
+                    else:
+                        st_std.append(np.nan)
+                    if len(pd_PQ) > 0:
+                        idx_Q = pd_PQ['ECG_Q_Peaks'].to_numpy().astype(np.int)
+                        idx_P = pd_PQ['ECG_P_Peaks'].to_numpy().astype(np.int)
+                        PQ_std = np.mean(np.array([np.std(filtered[idx_P[i]: idx_Q[i]]) for i in range(len(idx_P))]))
+                        pq_std.append(PQ_std)
+                    else:
+                        pq_std.append(np.nan)
+                else:
+                    print("nk analysis got its problem for i={}".format(i))
+                    st_std.append(np.nan)
+                    pq_std.append(np.nan)
+            else:
+                print("nk analysis got its problem for i={}".format(i))
+                st_std.append(np.nan)
+                pq_std.append(np.nan)
             try:
                 minhr.append(min(out[6]))
                 maxhr.append(max(out[6]))
@@ -167,6 +191,8 @@ class CoreComponent:
         full_validation_features['sdnn'] = pd.Series(SDNN)
         full_validation_features['sdsd'] = pd.Series(SDSD)
         full_validation_features['rmssd'] = pd.Series(RMSSD)
+        full_validation_features['ststd'] = pd.Series(st_std)
+        full_validation_features['pqstd'] = pd.Series(st_std)
 
         full_validation_features = full_validation_features.to_numpy()
         full_validation_features, self.full_Y = self.data_factory.impute_dataset(full_validation_features, self.full_Y,
@@ -205,7 +231,7 @@ class CoreComponent:
 
         self.initialized = True
 
-    def run(self):
+    def run(self, seed=66):
         if self.model_name == "svm":
             plot_stats(self.full_X)
 
@@ -431,7 +457,7 @@ class CoreComponent:
             path = os.path.join(self.data_path, name)
             df.to_csv(path, index=False)
         elif self.model_name == 'nnet':
-            torch.random.manual_seed(0)
+            torch.random.manual_seed(seed)
             # 0. transfer numpy data to Tensor data
             self.log_factory.InfoLog("Read data completed from X_train.csv, with shape as {}".format(self.full_X.shape))
             self.full_X = torch.autograd.Variable(torch.from_numpy(np.array(self.full_X)).float()).to(self.device)
@@ -496,6 +522,24 @@ class CoreComponent:
                         predicted_y_validate = torch.argmax(self.train_model(self.validation_X),
                                                             dim=1).cpu().numpy().reshape(-1)
                         self.dump_validated_y(predicted_y_validate)
+
+    def post_process_cls3(self):
+        # 2. draw figures
+        self.full_Y = self.full_Y.reshape(-1)
+        self.full_Y = self.full_Y.astype(np.int)
+        colors = ['r', 'g', 'b', 'black']
+        fig = plt.figure(1)
+        plt.title("pqtime")
+        x = [[], [], [], []]
+        y = [[], [], [], []]
+        for i in range(self.full_X.shape[0]):
+            x[self.full_Y[i]].append(i)
+            y[self.full_Y[i]].append(self.full_X[i, -2])
+        for i in range(4):
+            plt.scatter(x[i], y[i], color=colors[i], label=str(i))
+        plt.legend()
+        plt.show()
+        fig.savefig(os.path.join(self.data_path, "ecg.png"))
 
     def kill(self):
         self.log_factory.kill()

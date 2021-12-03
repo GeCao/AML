@@ -11,7 +11,7 @@ class MyNNet(MyModel):
     def __init__(self, core_management):
         super(MyNNet, self).__init__(core_management)
 
-        self.hideen_dim_0 = None
+        self.hideen_dim_0 = 64
         self.hideen_dim_1 = 64
         self.hideen_dim_2 = 16
 
@@ -28,8 +28,8 @@ class MyNNet(MyModel):
 
     def initialization(self, input_dimension):
         self.input_dimension = input_dimension
-        self.total_epoch = 50000
-        self.hideen_dim_0 = self.input_dimension
+        self.total_epoch = 8000
+        self.hideen_dim_0 = self.input_dimension if self.hideen_dim_0 is None else self.hideen_dim_0
 
         self.layer0 = torch.nn.Linear(self.input_dimension, self.hideen_dim_0, bias=True).to(self.device)
         kaiming_uniform_(self.layer0.weight, nonlinearity='leaky_relu')

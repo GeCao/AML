@@ -3,3 +3,4 @@ pytorch >= 1.2.0
 tqdm
 sklearn
 biosppy
+neurokit2
